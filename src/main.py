@@ -10,30 +10,19 @@ from fairlearn.metrics import (
     true_positive_rate_difference,
     false_positive_rate_difference,
 )
-from statsmodels.tsa.ar_model import AutoReg
 
 
-def get_next_ratio_forecast(history: list | np.ndarray) -> float:
-    history = np.array(history) if isinstance(history, list) else history
+def forecast_joint_distributions(
+    historical_proportions: dict[str, list[float]],
+    window: int = 3,
+) -> dict[str, float]:
+    forecasted = {}
+    for key, history in historical_proportions.items():
+        series = pd.Series(history)
+        rolling_avg = series.rolling(window=window, min_periods=1).mean()
+        forecasted[key] = float(rolling_avg.iloc[-1])
 
-    if len(history) == 0:
-        return 0.5
-
-    if len(history) == 1:
-        return float(history[-1])
-
-    if len(history) == 2:
-        slope = history[1] - history[0]
-        predicted_ratio = history[1] + slope
-        return float(np.clip(predicted_ratio, 0.0, 1.0))
-
-    model = AutoReg(history, lags=1, trend='c')
-    model.fit()
-    model_fit = model.fit()
-    forecast = model_fit.forecast(steps=1)[0]
-    predicted_ratio = np.clip(forecast, 0.0, 1.0)
-
-    return float(predicted_ratio)
+    return forecasted
 
 
 def pre_process_df(
@@ -73,18 +62,14 @@ def weight_estimation(
     df: pd.DataFrame,
     sensitive_attribute: str,
     target_label: str,
-    predicted_ratio: float = None,
 ) -> np.array:
+
     n = df.shape[0]
     positve = df[df[target_label] == 1].shape[0]
     negative = df[df[target_label] == 0].shape[0]
 
-    if predicted_ratio is None:
-        deprived = (df[df[sensitive_attribute] == 0]).shape[0]
-        favored = (df[df[sensitive_attribute] == 1]).shape[0]
-    else:
-        deprived = n * predicted_ratio
-        favored = n * (1 - predicted_ratio)
+    deprived = (df[df[sensitive_attribute] == 0]).shape[0]
+    favored = (df[df[sensitive_attribute] == 1]).shape[0]
 
     DP = df[(df[sensitive_attribute] == 0) & (df[target_label] == 1)].shape[0]
     DN = df[(df[sensitive_attribute] == 0) & (df[target_label] == 0)].shape[0]
@@ -95,6 +80,32 @@ def weight_estimation(
     W_DN = (deprived * negative) / (n * DN)
     W_FP = (favored * positve) / (n * FP)
     W_FN = (favored * negative) / (n * FN)
+
+    return np.array([W_DP, W_DN, W_FP, W_FN])
+
+
+def weight_estimation_anticipated(
+    forecasted: dict[str, float],
+) -> np.array:
+    # Forecasted joint cell values (these are proportions of total)
+    p_S0_Y1 = forecasted['S0_Y1']  # P(S=0, Y=1)
+    p_S0_Y0 = forecasted['S0_Y0']  # P(S=0, Y=0)
+    p_S1_Y1 = forecasted['S1_Y1']  # P(S=1, Y=1)
+    p_S1_Y0 = forecasted['S1_Y0']  # P(S=1, Y=0)
+
+    # Derive marginals from the four joint cells
+    n = p_S0_Y1 + p_S0_Y0 + p_S1_Y1 + p_S1_Y0  # total (sums to ~1.0 if proportions)
+
+    deprived = p_S0_Y1 + p_S0_Y0   # P(S=0)
+    favored = p_S1_Y1 + p_S1_Y0    # P(S=1)
+    positive = p_S0_Y1 + p_S1_Y1   # P(Y=1)
+    negative = p_S0_Y0 + p_S1_Y0   # P(Y=0)
+
+    # Kamiran formula: W = P_expected / P_observed = [P(S) * P(Y)] / [n * P(S,Y)]
+    W_DP = (deprived * positive) / (n * p_S0_Y1)   # W for S=0, Y=1
+    W_DN = (deprived * negative) / (n * p_S0_Y0)   # W for S=0, Y=0
+    W_FP = (favored * positive) / (n * p_S1_Y1)    # W for S=1, Y=1
+    W_FN = (favored * negative) / (n * p_S1_Y0)    # W for S=1, Y=0
 
     return np.array([W_DP, W_DN, W_FP, W_FN])
 
@@ -132,7 +143,7 @@ def reweigh_df(
     target_label: str,
     baseline_type: str,
     alpha: float = 0.0,
-    predicted_ratio: float = None,
+    forecasted_distributions: dict[str, float] = None,
 ) -> np.array:
 
     print('started reweighing process.')
@@ -141,13 +152,15 @@ def reweigh_df(
 
     w_past = weight_estimation(train_df, sensitive_attribute, target_label)
 
-    if baseline_type == 'abcinml' and predicted_ratio is not None:
-        w_future = weight_estimation(
-            train_df, sensitive_attribute, target_label, predicted_ratio
-        )
+    if baseline_type == 'abcinml' and forecasted_distributions is not None:
+        w_future = weight_estimation_anticipated(forecasted_distributions)
         w_final = (1 - alpha) * w_past + alpha * w_future
         print(
-            f'Applied alpha blending: α={alpha}, predicted_ratio={predicted_ratio:.4f}'
+            f'Applied alpha blending: α={alpha}, '
+            f'forecasted S0_Y1={forecasted_distributions["S0_Y1"]:.4f}, '
+            f'S0_Y0={forecasted_distributions["S0_Y0"]:.4f}, '
+            f'S1_Y1={forecasted_distributions["S1_Y1"]:.4f}, '
+            f'S1_Y0={forecasted_distributions["S1_Y0"]:.4f}'
         )
     else:
         w_final = w_past
@@ -163,6 +176,20 @@ def reweigh_df(
     return sample_weights
 
 
+def compute_batch_proportions(
+    batch_df: pd.DataFrame,
+    sensitive_attribute: str,
+    target_label: str,
+) -> dict[str, float]:
+    n = len(batch_df)
+    return {
+        'S0_Y1': len(batch_df[(batch_df[sensitive_attribute] == 0) & (batch_df[target_label] == 1)]) / n,
+        'S0_Y0': len(batch_df[(batch_df[sensitive_attribute] == 0) & (batch_df[target_label] == 0)]) / n,
+        'S1_Y1': len(batch_df[(batch_df[sensitive_attribute] == 1) & (batch_df[target_label] == 1)]) / n,
+        'S1_Y0': len(batch_df[(batch_df[sensitive_attribute] == 1) & (batch_df[target_label] == 0)]) / n,
+    }
+
+
 def ABCInML(
     df: pd.DataFrame,
     window_column: str,
@@ -170,6 +197,7 @@ def ABCInML(
     target_label: str,
     baseline_type: str,
     alpha: float,
+    forecast_window: int = 3,
 ) -> None:
 
     df = pre_process_df(
@@ -180,7 +208,13 @@ def ABCInML(
     )
 
     i = 0
-    historical_ratios = []
+
+    historical_proportions: dict[str, list[float]] = {
+        'S0_Y1': [],
+        'S0_Y0': [],
+        'S1_Y1': [],
+        'S1_Y0': [],
+    }
 
     for batch in df[window_column].unique():
         print(f'BATCH: {batch}')
@@ -188,14 +222,19 @@ def ABCInML(
         sample_weights = None
         batch_df = df[df[window_column] == batch].copy()
 
-        current_ratio = len(batch_df[batch_df[sensitive_attribute] == 0]) / len(
-            batch_df
-        )
-
-        predicted_ratio = None
+        forecasted_distributions = None
         if baseline_type == 'abcinml' and i > 0:
-            predicted_ratio = get_next_ratio_forecast(historical_ratios)
-            print(f'Forecasted ratio for batch {i}: {predicted_ratio:.4f}')
+            forecasted_distributions = forecast_joint_distributions(
+                historical_proportions,
+                window=forecast_window,
+            )
+            print(
+                f'Forecasted distributions for batch {i}: '
+                f'S0_Y1={forecasted_distributions["S0_Y1"]:.4f}, '
+                f'S0_Y0={forecasted_distributions["S0_Y0"]:.4f}, '
+                f'S1_Y1={forecasted_distributions["S1_Y1"]:.4f}, '
+                f'S1_Y0={forecasted_distributions["S1_Y0"]:.4f}'
+            )
 
         X = batch_df.drop(columns=[window_column])
         y = batch_df[target_label]
@@ -213,7 +252,7 @@ def ABCInML(
                     target_label,
                     baseline_type,
                     alpha=alpha,
-                    predicted_ratio=predicted_ratio,
+                    forecasted_distributions=forecasted_distributions,
                 )
 
         if (baseline_type in ['vanilla', 'static'] and i == 0) or (
@@ -230,8 +269,14 @@ def ABCInML(
         sf_test = X_test[sensitive_attribute]
         run_tests(y_test, y_pred, y_pred_proba, sf_test)
 
-        historical_ratios.append(current_ratio)
-        print(f'Actual ratio for batch {i}: {current_ratio:.4f}')
+        # GAP 1 FIX: Record all 4 proportions for this batch
+        current_proportions = compute_batch_proportions(
+            batch_df, sensitive_attribute, target_label
+        )
+        for key in historical_proportions:
+            historical_proportions[key].append(current_proportions[key])
+
+        print(f'Actual proportions for batch {i}: {current_proportions}')
 
         i += 1
 
@@ -248,6 +293,7 @@ def main():
         target_label='PINCP',
         baseline_type='abcinml',
         alpha=0.20,
+        forecast_window=3,
     )
 
 
