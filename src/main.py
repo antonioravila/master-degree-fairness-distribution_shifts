@@ -1,7 +1,6 @@
 import pandas as pd
 import numpy as np
 from sklearn.linear_model import LogisticRegression
-from sklearn.model_selection import train_test_split
 from sklearn.metrics import accuracy_score, roc_auc_score
 import warnings
 from sklearn.exceptions import ConvergenceWarning
@@ -87,25 +86,22 @@ def weight_estimation(
 def weight_estimation_anticipated(
     forecasted: dict[str, float],
 ) -> np.array:
-    # Forecasted joint cell values (these are proportions of total)
-    p_S0_Y1 = forecasted['S0_Y1']  # P(S=0, Y=1)
-    p_S0_Y0 = forecasted['S0_Y0']  # P(S=0, Y=0)
-    p_S1_Y1 = forecasted['S1_Y1']  # P(S=1, Y=1)
-    p_S1_Y0 = forecasted['S1_Y0']  # P(S=1, Y=0)
+    p_S0_Y1 = forecasted['S0_Y1']
+    p_S0_Y0 = forecasted['S0_Y0']
+    p_S1_Y1 = forecasted['S1_Y1']
+    p_S1_Y0 = forecasted['S1_Y0']
 
-    # Derive marginals from the four joint cells
-    n = p_S0_Y1 + p_S0_Y0 + p_S1_Y1 + p_S1_Y0  # total (sums to ~1.0 if proportions)
+    n = p_S0_Y1 + p_S0_Y0 + p_S1_Y1 + p_S1_Y0
 
-    deprived = p_S0_Y1 + p_S0_Y0   # P(S=0)
-    favored = p_S1_Y1 + p_S1_Y0    # P(S=1)
-    positive = p_S0_Y1 + p_S1_Y1   # P(Y=1)
-    negative = p_S0_Y0 + p_S1_Y0   # P(Y=0)
+    deprived = p_S0_Y1 + p_S0_Y0
+    favored = p_S1_Y1 + p_S1_Y0
+    positive = p_S0_Y1 + p_S1_Y1
+    negative = p_S0_Y0 + p_S1_Y0
 
-    # Kamiran formula: W = P_expected / P_observed = [P(S) * P(Y)] / [n * P(S,Y)]
-    W_DP = (deprived * positive) / (n * p_S0_Y1)   # W for S=0, Y=1
-    W_DN = (deprived * negative) / (n * p_S0_Y0)   # W for S=0, Y=0
-    W_FP = (favored * positive) / (n * p_S1_Y1)    # W for S=1, Y=1
-    W_FN = (favored * negative) / (n * p_S1_Y0)    # W for S=1, Y=0
+    W_DP = (deprived * positive) / (n * p_S0_Y1)
+    W_DN = (deprived * negative) / (n * p_S0_Y0)
+    W_FP = (favored * positive) / (n * p_S1_Y1)
+    W_FN = (favored * negative) / (n * p_S1_Y0)
 
     return np.array([W_DP, W_DN, W_FP, W_FN])
 
@@ -119,7 +115,6 @@ def reweighing(
     df_ = df.copy()
     df_['weight'] = np.ones(len(df_))
 
-    # Update weights based on group/label combination
     df_['weight'] = np.where(
         (df_[sensitive_attribute] == 0) & (df_[target_label] == 1), W_DP, df_['weight']
     )
@@ -165,9 +160,7 @@ def reweigh_df(
     else:
         w_new = w_current
 
-    reweighed_train_df = reweighing(
-        train_df, sensitive_attribute, target_label, w_new
-    )
+    reweighed_train_df = reweighing(train_df, sensitive_attribute, target_label, w_new)
 
     sample_weights = reweighed_train_df['weight'].values
 
@@ -183,10 +176,30 @@ def compute_batch_proportions(
 ) -> dict[str, float]:
     n = len(batch_df)
     return {
-        'S0_Y1': len(batch_df[(batch_df[sensitive_attribute] == 0) & (batch_df[target_label] == 1)]) / n,
-        'S0_Y0': len(batch_df[(batch_df[sensitive_attribute] == 0) & (batch_df[target_label] == 0)]) / n,
-        'S1_Y1': len(batch_df[(batch_df[sensitive_attribute] == 1) & (batch_df[target_label] == 1)]) / n,
-        'S1_Y0': len(batch_df[(batch_df[sensitive_attribute] == 1) & (batch_df[target_label] == 0)]) / n,
+        'S0_Y1': len(
+            batch_df[
+                (batch_df[sensitive_attribute] == 0) & (batch_df[target_label] == 1)
+            ]
+        )
+        / n,
+        'S0_Y0': len(
+            batch_df[
+                (batch_df[sensitive_attribute] == 0) & (batch_df[target_label] == 0)
+            ]
+        )
+        / n,
+        'S1_Y1': len(
+            batch_df[
+                (batch_df[sensitive_attribute] == 1) & (batch_df[target_label] == 1)
+            ]
+        )
+        / n,
+        'S1_Y0': len(
+            batch_df[
+                (batch_df[sensitive_attribute] == 1) & (batch_df[target_label] == 0)
+            ]
+        )
+        / n,
     }
 
 
@@ -207,7 +220,7 @@ def ABCInML(
         favored_value=1,
     )
 
-    i = 0
+    batches = sorted(df[window_column].unique())
 
     historical_proportions: dict[str, list[float]] = {
         'S0_Y1': [],
@@ -216,75 +229,98 @@ def ABCInML(
         'S1_Y0': [],
     }
 
-    for batch in df[window_column].unique():
-        print(f'BATCH: {batch}')
+    model = None
 
-        sample_weights = None
-        batch_df = df[df[window_column] == batch].copy()
+    for i in range(len(batches)):
+        print(f'BATCH: {batches[i]}')
 
-        forecasted_distributions = None
-        if baseline_type == 'abcinml' and i > 0:
-            forecasted_distributions = forecast_joint_distributions(
-                historical_proportions,
-                window=forecast_window,
-            )
-            print(
-                f'Forecasted distributions for batch {i}: '
-                f'S0_Y1={forecasted_distributions["S0_Y1"]:.4f}, '
-                f'S0_Y0={forecasted_distributions["S0_Y0"]:.4f}, '
-                f'S1_Y1={forecasted_distributions["S1_Y1"]:.4f}, '
-                f'S1_Y0={forecasted_distributions["S1_Y0"]:.4f}'
-            )
+        current_batch_df = df[df[window_column] == batches[i]].copy()
 
-        X = batch_df.drop(columns=[window_column])
-        y = batch_df[target_label]
-
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=0.2, random_state=42
+        current_proportions = compute_batch_proportions(
+            current_batch_df, sensitive_attribute, target_label
         )
 
-        if baseline_type in ['static', 'dynamic', 'abcinml']:
-            if not (baseline_type == 'static' and i != 0):
-                sample_weights = reweigh_df(
-                    X_train,
-                    y_train,
-                    sensitive_attribute,
-                    target_label,
-                    baseline_type,
-                    alpha=alpha,
-                    forecasted_distributions=forecasted_distributions,
+        if i == 0:
+            for key in historical_proportions:
+                historical_proportions[key].append(current_proportions[key])
+            print(f'Actual proportions for batch {i}: {current_proportions}')
+
+            if baseline_type in ['vanilla', 'static']:
+                train_df = current_batch_df.drop(columns=[window_column])
+                X_train = train_df.drop(columns=[target_label])
+                y_train = train_df[target_label]
+
+                sample_weights = None
+                if baseline_type == 'static':
+                    sample_weights = reweigh_df(
+                        X_train,
+                        y_train,
+                        sensitive_attribute,
+                        target_label,
+                        baseline_type,
+                    )
+
+                model = LogisticRegression(max_iter=150)
+                model.fit(X_train, y_train, sample_weight=sample_weights)
+                print('Trained initial model on batch 0.')
+
+            continue
+
+        train_batches = batches[0:i]
+        train_df = df[df[window_column].isin(train_batches)].copy()
+        train_df = train_df.drop(columns=[window_column])
+        X_train = train_df.drop(columns=[target_label])
+        y_train = train_df[target_label]
+
+        test_df = current_batch_df.drop(columns=[window_column])
+        X_test = test_df.drop(columns=[target_label])
+        y_test = test_df[target_label]
+
+        if baseline_type in ['dynamic', 'abcinml']:
+            forecasted_distributions = None
+            if baseline_type == 'abcinml':
+                forecasted_distributions = forecast_joint_distributions(
+                    historical_proportions,
+                    window=forecast_window,
+                )
+                print(
+                    f'Forecasted distributions for batch {i}: '
+                    f'S0_Y1={forecasted_distributions["S0_Y1"]:.4f}, '
+                    f'S0_Y0={forecasted_distributions["S0_Y0"]:.4f}, '
+                    f'S1_Y1={forecasted_distributions["S1_Y1"]:.4f}, '
+                    f'S1_Y0={forecasted_distributions["S1_Y0"]:.4f}'
                 )
 
-        if (baseline_type in ['vanilla', 'static'] and i == 0) or (
-            baseline_type in ['dynamic', 'abcinml']
-        ):
-            print('started training the model.')
+            sample_weights = reweigh_df(
+                X_train,
+                y_train,
+                sensitive_attribute,
+                target_label,
+                baseline_type,
+                alpha=alpha,
+                forecasted_distributions=forecasted_distributions,
+            )
+
             model = LogisticRegression(max_iter=150)
             model.fit(X_train, y_train, sample_weight=sample_weights)
-            print('finished trained the model.')
+            print(f'Trained model on batches {train_batches}.')
 
         y_pred = model.predict(X_test)
         y_pred_proba = model.predict_proba(X_test)
 
         sf_test = X_test[sensitive_attribute]
+        print(f'Testing on batch {batches[i]}:')
         run_tests(y_test, y_pred, y_pred_proba, sf_test)
 
-        # GAP 1 FIX: Record all 4 proportions for this batch
-        current_proportions = compute_batch_proportions(
-            batch_df, sensitive_attribute, target_label
-        )
         for key in historical_proportions:
             historical_proportions[key].append(current_proportions[key])
-
         print(f'Actual proportions for batch {i}: {current_proportions}')
-
-        i += 1
 
 
 def main():
     warnings.filterwarnings('ignore', category=ConvergenceWarning)
 
-    path = r'src\data\csv\acs_income_TX.csv'
+    path = r'src\data\ACSIncome\acs_income_TX.csv'
     df = pd.read_csv(path)
     ABCInML(
         df=df,
