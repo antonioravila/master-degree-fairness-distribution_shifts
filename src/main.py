@@ -284,7 +284,7 @@ def ABCInML(
 def main():
     warnings.filterwarnings('ignore', category=ConvergenceWarning)
 
-    path = r'src\data\csv\acs_income_union.csv'
+    path = r'src\data\csv\acs_income_TX.csv'
     df = pd.read_csv(path)
     ABCInML(
         df=df,
