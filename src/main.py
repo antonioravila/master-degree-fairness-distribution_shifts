@@ -150,11 +150,11 @@ def reweigh_df(
     train_df = X_train.copy()
     train_df[target_label] = y_train
 
-    w_past = weight_estimation(train_df, sensitive_attribute, target_label)
+    w_current = weight_estimation(train_df, sensitive_attribute, target_label)
 
     if baseline_type == 'abcinml' and forecasted_distributions is not None:
         w_future = weight_estimation_anticipated(forecasted_distributions)
-        w_final = (1 - alpha) * w_past + alpha * w_future
+        w_new = alpha * w_current + (1 - alpha) * w_future
         print(
             f'Applied alpha blending: α={alpha}, '
             f'forecasted S0_Y1={forecasted_distributions["S0_Y1"]:.4f}, '
@@ -163,10 +163,10 @@ def reweigh_df(
             f'S1_Y0={forecasted_distributions["S1_Y0"]:.4f}'
         )
     else:
-        w_final = w_past
+        w_new = w_current
 
     reweighed_train_df = reweighing(
-        train_df, sensitive_attribute, target_label, w_final
+        train_df, sensitive_attribute, target_label, w_new
     )
 
     sample_weights = reweighed_train_df['weight'].values
