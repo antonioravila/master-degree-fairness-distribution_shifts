@@ -15,7 +15,7 @@ dependencies = [
 ]
 
 [project.scripts]
-download-data = "src.tools.download_data:main"
+download-data = "src.tools.download_acs_data:main"
 
 [build-system]
 requires = ["hatchling"]

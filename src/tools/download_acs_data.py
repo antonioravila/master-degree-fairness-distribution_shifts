@@ -1,11 +1,13 @@
 import os
 import pandas as pd
-from folktables import ACSDataSource, ACSIncome
+from folktables import ACSDataSource, ACSIncome, ACSEmployment
 
 
 def extract_and_save_acs_data(
-    years: list[int], state: str, target_path: str = 'src/data/csv'
+    years: list[int], state: str, acs_type: str, target_path: str = 'src/data'
 ):
+    target_path = os.path.join(target_path, 'ACS' + acs_type.capitalize())
+    print(f'Target path: {target_path}')
     os.makedirs(target_path, exist_ok=True)
 
     all_years_data = []
@@ -18,7 +20,8 @@ def extract_and_save_acs_data(
             )
             acs_data = data_source.get_data(states=[state], download=True)
 
-            features, label, _ = ACSIncome.df_to_pandas(acs_data)
+            acs_problem = ACSIncome if acs_type == 'Income' else ACSEmployment
+            features, label, _ = acs_problem.df_to_pandas(acs_data)
 
             year_df = pd.concat([features, label], axis=1)
 
@@ -33,7 +36,7 @@ def extract_and_save_acs_data(
     try:
         final_df = pd.concat(all_years_data, axis=0, ignore_index=True)
 
-        filename = f'acs_income_{state}.csv'
+        filename = f'acs_{acs_type.lower()}_{state}.csv'
         file_path = os.path.join(target_path, filename)
 
         final_df.to_csv(file_path, index=False)
@@ -44,7 +47,9 @@ def extract_and_save_acs_data(
 
 
 def main():
-    extract_and_save_acs_data(years=[2014, 2015, 2016, 2017, 2018], state='NE')
+    extract_and_save_acs_data(
+        years=[2014, 2015, 2016, 2017, 2018], state='CA', acs_type='Employment'
+    )
 
 
 if __name__ == '__main__':
