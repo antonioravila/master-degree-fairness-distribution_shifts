@@ -36,25 +36,26 @@ def pre_process_df(
     return df
 
 
-def run_tests(
+def compute_snapshot_metrics(
     y_test: pd.DataFrame,
     y_pred: pd.DataFrame,
     y_pred_proba: np.array,
     sensitive_features: str,
-) -> None:
-    print(f'ACC (Accuracy): {accuracy_score(y_test, y_pred)}')
-    print(
-        f'AUC (Area Under the ROC Curve): {roc_auc_score(y_test, y_pred_proba[:, 1])}'
+) -> tuple[float]:
+
+    acc = accuracy_score(y_test, y_pred)
+    auc = roc_auc_score(y_test, y_pred_proba[:, 1])
+    sp = demographic_parity_difference(
+        y_true=y_test, y_pred=y_pred, sensitive_features=sensitive_features
     )
-    print(
-        f'S.P (Statistical Parity): {demographic_parity_difference(y_true=y_test, y_pred=y_pred, sensitive_features=sensitive_features)}'
+    tpr = true_positive_rate_difference(
+        y_true=y_test, y_pred=y_pred, sensitive_features=sensitive_features
     )
-    print(
-        f'TPR (True Positive Rate): {true_positive_rate_difference(y_true=y_test, y_pred=y_pred, sensitive_features=sensitive_features)}'
+    fpr = false_positive_rate_difference(
+        y_true=y_test, y_pred=y_pred, sensitive_features=sensitive_features
     )
-    print(
-        f'FPR (False Positive Rate): {false_positive_rate_difference(y_true=y_test, y_pred=y_pred, sensitive_features=sensitive_features)}'
-    )
+
+    return acc, auc, sp, tpr, fpr
 
 
 def weight_estimation(
@@ -203,6 +204,22 @@ def compute_batch_proportions(
     }
 
 
+def compute_temporal_metrics(assessment_metrics: pd.DataFrame) -> pd.DataFrame:
+    mb = assessment_metrics['sp'].max()
+    ts = abs(assessment_metrics['sp'].diff().mean())
+    mbd = abs(assessment_metrics['sp'].diff().max())
+
+    temporal_metrics = pd.DataFrame(
+        {
+            'Maximum Bias': [mb],
+            'Temporal Stability': [ts],
+            'Maximum Bias Difference': [mbd],
+        }
+    )
+
+    return temporal_metrics
+
+
 def ABCInML(
     df: pd.DataFrame,
     window_column: str,
@@ -228,6 +245,17 @@ def ABCInML(
         'S1_Y1': [],
         'S1_Y0': [],
     }
+
+    assessment_metrics = pd.DataFrame(
+        {
+            'acc': [],
+            'auc': [],
+            'sp': [],
+            'tpr': [],
+            'fpr': [],
+            'batch': [],
+        }
+    )
 
     model = None
 
@@ -309,13 +337,27 @@ def ABCInML(
         y_pred_proba = model.predict_proba(X_test)
 
         sf_test = X_test[sensitive_attribute]
+
         print(f'Testing on batch {batches[i]}:')
-        run_tests(y_test, y_pred, y_pred_proba, sf_test)
+        acc, auc, sp, tpr, fpr = compute_snapshot_metrics(
+            y_test, y_pred, y_pred_proba, sf_test
+        )
+        assessment_metrics.loc[len(assessment_metrics)] = [
+            acc,
+            auc,
+            sp,
+            tpr,
+            fpr,
+            batches[i],
+        ]
 
         for key in historical_proportions:
             historical_proportions[key].append(current_proportions[key])
         print(f'Actual proportions for batch {i}: {current_proportions}')
 
+    temporal_metrics = compute_temporal_metrics(assessment_metrics)
+    print(assessment_metrics)
+    print(temporal_metrics)
 
 def main():
     warnings.filterwarnings('ignore', category=ConvergenceWarning)
@@ -327,7 +369,7 @@ def main():
         window_column='Year',
         sensitive_attribute='SEX',
         target_label='PINCP',
-        baseline_type='abcinml',
+        baseline_type='vanilla',
         alpha=0.20,
         forecast_window=3,
     )
