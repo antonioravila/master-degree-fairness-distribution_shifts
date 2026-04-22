@@ -38,27 +38,36 @@ def ABCInML(
 
     model = None
     sample_weights = None
+    forecasted_distributions = None
 
     print(f'(1) running with alpha: {alpha}')
 
     for i in range(len(batches)):
-        print(f'(1.1) running for batch: {batches[i]}')
+        batch = batches[i]
 
-        current_batch_df = df[df[window_column] == batches[i]].copy()
+        print(f'(1.1) running for batch: {batch}')
+
+        current_batch_df = df[df[window_column] == batch].copy()
 
         current_proportions = model_utils.compute_batch_proportions(
             current_batch_df, sensitive_attribute, target_label
         )
 
-        if i == 0:
-            for key in historical_proportions:
-                historical_proportions[key].append(current_proportions[key])
+        for key in historical_proportions:
+            historical_proportions[key].append(current_proportions[key])
 
-            if baseline_type in ['vanilla', 'static']:
-                train_df = current_batch_df.drop(columns=[window_column])
-                X_train = train_df.drop(columns=[target_label])
-                y_train = train_df[target_label]
-
+        if baseline_type in ['vanilla', 'static']:
+            X_train, y_train, X_test, y_test = model_utils.get_train_and_test(
+                df=current_batch_df, 
+                baseline_type=baseline_type, 
+                window_column=window_column, 
+                target_label=target_label, 
+                batches=batches,
+                i=i
+            )
+            
+            if i == 0:
+        
                 if baseline_type == 'static':
                     sample_weights = model_utils.reweigh_df(
                         X_train,
@@ -72,19 +81,16 @@ def ABCInML(
                 model = LogisticRegression(max_iter=150)
                 model.fit(X_train, y_train, sample_weight=sample_weights)
 
-            continue
-
-        test_df = current_batch_df.drop(columns=[window_column])
-        X_test = test_df.drop(columns=[target_label])
-        y_test = test_df[target_label]
-
         if baseline_type in ['dynamic', 'abcinml']:
-            train_df = df[df[window_column].isin(batches[0:i])].copy()
-            train_df = train_df.drop(columns=[window_column])
-            X_train = train_df.drop(columns=[target_label])
-            y_train = train_df[target_label]
+            X_train, y_train, X_test, y_test = model_utils.get_train_and_test(
+                df=df, 
+                baseline_type=baseline_type, 
+                window_column=window_column, 
+                target_label=target_label, 
+                batches=batches,
+                i=i
+            )
 
-            forecasted_distributions = None
             if baseline_type == 'abcinml':
                 forecasted_distributions = model_utils.forecast_joint_distributions(
                     historical_proportions,
@@ -120,12 +126,9 @@ def ABCInML(
             sp,
             tpr,
             fpr,
-            batches[i],
+            batch,
             alpha,
         ]
-
-        for key in historical_proportions:
-            historical_proportions[key].append(current_proportions[key])
 
     temporal_metrics = metrics_utils.compute_temporal_metrics(assessment_metrics, alpha)
 
@@ -137,7 +140,9 @@ def ABCInML(
 def main():
     warnings.filterwarnings('ignore', category=ConvergenceWarning)
 
-    alphas, baseline_type, path, sensitive_attribute, target_label, window_column  = general_utils.parse_arguments()
+    alphas, baseline_type, path, sensitive_attribute, target_label, window_column = (
+        general_utils.parse_arguments()
+    )
 
     df = data_utils.pre_process_df(
         df=pd.read_csv(path),
@@ -152,7 +157,6 @@ def main():
     print(f'--- Running baseline: {baseline_type} ---\n')
 
     for alpha in alphas:
-
         assessment_metrics, temporal_metrics = ABCInML(
             df=df,
             window_column=window_column,

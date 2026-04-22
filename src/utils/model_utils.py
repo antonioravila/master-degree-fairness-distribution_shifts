@@ -1,5 +1,7 @@
 import pandas as pd
 import numpy as np
+from sklearn.model_selection import train_test_split
+
 
 def compute_batch_proportions(
     batch_df: pd.DataFrame,
@@ -150,3 +152,25 @@ def reweigh_df(
     sample_weights = reweighed_train_df['weight'].values
 
     return sample_weights
+
+
+def get_train_and_test(
+    df: pd.DataFrame,
+    baseline_type: str,
+    window_column: str,
+    target_label: str,
+    batches: pd.Series,
+    i: int,
+):
+    train_df = df.copy()
+
+    if baseline_type in ['dynamic', 'abcinml']:
+        train_df = df[df[window_column].isin(batches[0:i+1])]
+
+    X = train_df.drop(columns=[target_label, window_column])
+    y = train_df[target_label]
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, test_size=0.33, random_state=42
+    )
+
+    return X_train, y_train, X_test, y_test

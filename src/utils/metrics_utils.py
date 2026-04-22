@@ -9,7 +9,7 @@ from fairlearn.metrics import (
 
 
 def generate_charts() -> None:
-    #TODO generate charts for snapshot and temporal metrics over windows. 
+    # TODO generate charts for snapshot and temporal metrics over windows.
     pass
 
 
