@@ -2,6 +2,7 @@
 \.idea
 env/
 *.csv
+*.parquet
 .env
 *.vscode
 .venv/*

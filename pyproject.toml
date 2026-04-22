@@ -7,6 +7,7 @@ dependencies = [
     "folktables>=0.0.12",
     "matplotlib>=3.10.8",
     "pandas>=2.3.3",
+    "pyarrow>=23.0.1",
     "requests>=2.32.5",
     "ruff>=0.15.5",
     "scikit-learn>=1.8.0",
@@ -26,3 +27,8 @@ packages = ["src"]
 
 [tool.ruff.format]
 quote-style = "single"
+
+[dependency-groups]
+dev = [
+    "nbconvert>=7.17.1",
+]
