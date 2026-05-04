@@ -140,12 +140,11 @@ def ABCInML(
 def main():
     warnings.filterwarnings('ignore', category=ConvergenceWarning)
 
-    alphas, baseline_type, path, sensitive_attribute, target_label, window_column = (
+    alphas, baseline_type, sensitive_attribute, target_label, window_column = (
         general_utils.parse_arguments()
     )
 
     df = data_utils.pre_process_df(
-        df=pd.read_csv(path),
         sensitive_attribute=sensitive_attribute,
         sensitive_value=2,
         favored_value=1,
