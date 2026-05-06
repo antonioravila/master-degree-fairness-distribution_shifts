@@ -1,5 +1,4 @@
 import pandas as pd
-import duckdb
 from pathlib import Path
 
 
@@ -55,8 +54,8 @@ def _fill_na(df):
 def _convert_types(df):
     # DT_NOTIFIC: extract year, drop original
     df['DT_NOTIFIC'] = pd.to_datetime(df['DT_NOTIFIC'], errors='coerce')
-    df['YEAR'] = df['DT_NOTIFIC'].dt.year
-    df = df.drop(columns=['DT_NOTIFIC'])
+    df['YEAR-MONTH'] = df['DT_NOTIFIC'].dt.to_period('M')    
+    df.drop(columns=['DT_NOTIFIC'], inplace=True)
 
     # NU_IDADE_N: numeric, fill NaN with 0
     df['NU_IDADE_N'] = pd.to_numeric(df['NU_IDADE_N'], errors='coerce')
@@ -73,7 +72,7 @@ def _convert_types(df):
 
     for col in binary_cols:
         df[col] = pd.to_numeric(df[col], errors='coerce')
-        df[col] = df[col].map({1: 1, 2: 0}).astype(int)
+        df[col] = (df[col] == 1).astype(int)
 
     # Multi-category columns: cast to string, one-hot encode
     multi_cat_cols = [
@@ -82,7 +81,7 @@ def _convert_types(df):
     ]
     for col in multi_cat_cols:
         df[col] = df[col].astype(str)
-    df = pd.get_dummies(df, columns=multi_cat_cols, drop_first=True)
+    df = pd.get_dummies(df, columns=multi_cat_cols, drop_first=True, dtype=int)
 
     # CS_RACA: binarize 1 (Branca)→0, others→1
     df['CS_RACA'] = pd.to_numeric(df['CS_RACA'], errors='coerce')
@@ -102,8 +101,13 @@ def pre_process_df(
     favored_value: str | int,
 ) -> pd.DataFrame:
 
+    print('0) starting data pre-process')
+
     df = _import_data()
     df = _fill_na(df)
     df = _convert_types(df)
+    
+    df = df[df['YEAR-MONTH'].dt.year != 2018]
+    df.sort_values(by='YEAR-MONTH', ascending=True, inplace=True)
 
     return df

@@ -15,30 +15,15 @@ def ABCInML(
     forecast_window: int = 3,
 ) -> None:
 
-    batches = sorted(df[window_column].unique())
+    (
+        batches,
+        historical_proportions,
+        assessment_metrics,
+        model,
+        sample_weights,
+        forecasted_distributions,
+    ) = general_utils.initialize_variables(df, window_column)
 
-    historical_proportions: dict[str, list[float]] = {
-        'S0_Y1': [],
-        'S0_Y0': [],
-        'S1_Y1': [],
-        'S1_Y0': [],
-    }
-
-    assessment_metrics = pd.DataFrame(
-        {
-            'acc': [],
-            'auc': [],
-            'sp': [],
-            'tpr': [],
-            'fpr': [],
-            'batch': [],
-            'alpha': [],
-        }
-    )
-
-    model = None
-    sample_weights = None
-    forecasted_distributions = None
 
     print(f'(1) running with alpha: {alpha}')
 
@@ -58,16 +43,15 @@ def ABCInML(
 
         if baseline_type in ['vanilla', 'static']:
             X_train, y_train, X_test, y_test = model_utils.get_train_and_test(
-                df=current_batch_df, 
-                baseline_type=baseline_type, 
-                window_column=window_column, 
-                target_label=target_label, 
+                df=current_batch_df,
+                baseline_type=baseline_type,
+                window_column=window_column,
+                target_label=target_label,
                 batches=batches,
-                i=i
+                i=i,
             )
-            
+
             if i == 0:
-        
                 if baseline_type == 'static':
                     sample_weights = model_utils.reweigh_df(
                         X_train,
@@ -83,12 +67,12 @@ def ABCInML(
 
         if baseline_type in ['dynamic', 'abcinml']:
             X_train, y_train, X_test, y_test = model_utils.get_train_and_test(
-                df=df, 
-                baseline_type=baseline_type, 
-                window_column=window_column, 
-                target_label=target_label, 
+                df=df,
+                baseline_type=baseline_type,
+                window_column=window_column,
+                target_label=target_label,
                 batches=batches,
-                i=i
+                i=i,
             )
 
             if baseline_type == 'abcinml':
@@ -111,24 +95,25 @@ def ABCInML(
             model = LogisticRegression(max_iter=50)
             model.fit(X_train, y_train, sample_weight=sample_weights)
 
-        y_pred = model.predict(X_test)
-        y_pred_proba = model.predict_proba(X_test)
+        if i != 0:
+            y_pred = model.predict(X_test)
+            y_pred_proba = model.predict_proba(X_test)
 
-        sf_test = X_test[sensitive_attribute]
+            sf_test = X_test[sensitive_attribute]
 
-        print('(1.1.3) testing logistic regression model')
-        acc, auc, sp, tpr, fpr = metrics_utils.compute_snapshot_metrics(
-            y_test, y_pred, y_pred_proba, sf_test
-        )
-        assessment_metrics.loc[len(assessment_metrics)] = [
-            acc,
-            auc,
-            sp,
-            tpr,
-            fpr,
-            batch,
-            alpha,
-        ]
+            print('(1.1.3) testing logistic regression model')
+            acc, auc, sp, tpr, fpr = metrics_utils.compute_snapshot_metrics(
+                y_test, y_pred, y_pred_proba, sf_test
+            )
+            assessment_metrics.loc[len(assessment_metrics)] = [
+                acc,
+                auc,
+                sp,
+                tpr,
+                fpr,
+                batch,
+                alpha,
+            ]
 
     temporal_metrics = metrics_utils.compute_temporal_metrics(assessment_metrics, alpha)
 
