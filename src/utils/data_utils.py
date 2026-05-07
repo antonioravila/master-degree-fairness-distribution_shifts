@@ -87,10 +87,15 @@ def _convert_types(df):
     df['CS_RACA'] = pd.to_numeric(df['CS_RACA'], errors='coerce')
     df['CS_RACA'] = df['CS_RACA'].apply(lambda x: 0 if x == 1 else 1).astype(int)
 
-    # EVOLUCAO: keep only 1 (Cura) and 2 (Óbito), map 1→0, 2→1
+    # EVOLUCAO: keep only 1 (Cura) and 2 (Óbito)
     df['EVOLUCAO'] = pd.to_numeric(df['EVOLUCAO'], errors='coerce')
     df = df[df['EVOLUCAO'].isin([1, 2])]
     df['EVOLUCAO'] = df['EVOLUCAO'].map({1: 0, 2: 1}).astype(int)
+
+    df = df[df['NU_IDADE_N'] < 120]
+    IDADE_MIN_TEORICA = 0
+    IDADE_MAX_TEORICA = 120
+    df['NU_IDADE_N'] = (df['NU_IDADE_N'] - IDADE_MIN_TEORICA) / (IDADE_MAX_TEORICA - IDADE_MIN_TEORICA)
 
     return df
 

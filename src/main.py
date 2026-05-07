@@ -14,6 +14,8 @@ def ABCInML(
     alpha: float,
     forecast_window: int = 3,
 ) -> None:
+    
+    _MAX_ITER = 150
 
     (
         batches,
@@ -62,7 +64,7 @@ def ABCInML(
                     )
 
                 print('(1.1.2) training logistic regression model')
-                model = LogisticRegression(max_iter=150)
+                model = LogisticRegression(max_iter=_MAX_ITER)
                 model.fit(X_train, y_train, sample_weight=sample_weights)
 
         if baseline_type in ['dynamic', 'abcinml']:
@@ -92,7 +94,7 @@ def ABCInML(
             )
 
             print('(1.1.2) training logistic regression model')
-            model = LogisticRegression(max_iter=50)
+            model = LogisticRegression(max_iter=_MAX_ITER)
             model.fit(X_train, y_train, sample_weight=sample_weights)
 
         if i != 0:
@@ -154,7 +156,7 @@ def main():
         assessment_results_df = pd.concat([assessment_results_df, assessment_metrics])
         temporal_results_df = pd.concat([temporal_results_df, temporal_metrics])
 
-    metrics_utils.generate_charts()
+    metrics_utils.generate_charts(assessment_results_df, temporal_results_df, baseline_type=baseline_type, save=True)
 
     print('finished training.')
 
