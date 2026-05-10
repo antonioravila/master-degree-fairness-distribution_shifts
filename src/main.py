@@ -26,6 +26,8 @@ def ABCInML(
         forecasted_distributions,
     ) = general_utils.initialize_variables(df, window_column)
 
+    shap_records = []
+
 
     print(f'(1) running with alpha: {alpha}')
 
@@ -117,11 +119,16 @@ def ABCInML(
                 alpha,
             ]
 
+            shap_record = metrics_utils.compute_shap_values(model, X_test)
+            shap_record['batch'] = str(batch)
+            shap_record['alpha'] = alpha
+            shap_records.append(shap_record)
+
     temporal_metrics = metrics_utils.compute_temporal_metrics(assessment_metrics, alpha)
 
     print('\n')
 
-    return assessment_metrics, temporal_metrics
+    return assessment_metrics, temporal_metrics, shap_records
 
 
 def main():
@@ -139,11 +146,12 @@ def main():
 
     assessment_results_df = pd.DataFrame()
     temporal_results_df = pd.DataFrame()
+    shap_records = []
 
     print(f'--- Running baseline: {baseline_type} ---\n')
 
     for alpha in alphas:
-        assessment_metrics, temporal_metrics = ABCInML(
+        assessment_metrics, temporal_metrics, alpha_shap_records = ABCInML(
             df=df,
             window_column=window_column,
             sensitive_attribute=sensitive_attribute,
@@ -155,8 +163,10 @@ def main():
 
         assessment_results_df = pd.concat([assessment_results_df, assessment_metrics])
         temporal_results_df = pd.concat([temporal_results_df, temporal_metrics])
+        shap_records.extend(alpha_shap_records)
 
     metrics_utils.generate_charts(assessment_results_df, temporal_results_df, baseline_type=baseline_type, save=True)
+    metrics_utils.generate_shap_charts(shap_records, save=True)
 
     print('finished training.')
 

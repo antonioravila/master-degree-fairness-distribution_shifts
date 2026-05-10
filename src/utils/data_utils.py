@@ -94,7 +94,7 @@ def _convert_types(df):
 
     df = df[df['NU_IDADE_N'] < 120]
     IDADE_MIN_TEORICA = 0
-    IDADE_MAX_TEORICA = 120
+    IDADE_MAX_TEORICA = 100
     df['NU_IDADE_N'] = (df['NU_IDADE_N'] - IDADE_MIN_TEORICA) / (IDADE_MAX_TEORICA - IDADE_MIN_TEORICA)
 
     return df
