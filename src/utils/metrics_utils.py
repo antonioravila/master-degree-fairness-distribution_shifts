@@ -1,4 +1,5 @@
 import os
+import shap
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -162,3 +163,58 @@ def compute_snapshot_metrics(
     )
 
     return acc, auc, sp, tpr, fpr
+
+
+def compute_shap_values(model, X_test: pd.DataFrame) -> dict:
+    explainer = shap.LinearExplainer(model, X_test)
+    values = explainer.shap_values(X_test)
+    return {'shap_values': values, 'feature_names': list(X_test.columns)}
+
+
+def generate_shap_charts(shap_records: list, save: bool = False) -> None:
+    if not shap_records:
+        return
+
+    feature_names = shap_records[0]['feature_names']
+    batches = [r['batch'] for r in shap_records]
+
+    # mean |SHAP| per feature per batch → shape (n_batches, n_features)
+    mean_abs = np.array([
+        np.abs(r['shap_values']).mean(axis=0) for r in shap_records
+    ])
+
+    global_importance = mean_abs.mean(axis=0)
+    sorted_idx = np.argsort(global_importance)[::-1]
+
+    fig, (ax_bar, ax_heat) = plt.subplots(1, 2, figsize=(20, 12))
+
+    # --- global bar chart ---
+    ax_bar.barh(
+        [feature_names[i] for i in sorted_idx[::-1]],
+        global_importance[sorted_idx[::-1]],
+        color='steelblue',
+    )
+    ax_bar.set_xlabel('Mean |SHAP value|')
+    ax_bar.set_title('Global Feature Importance (all batches)')
+
+    # --- temporal heatmap ---
+    heatmap_data = mean_abs[:, sorted_idx].T  # (n_features, n_batches)
+    im = ax_heat.imshow(heatmap_data, aspect='auto', cmap='YlOrRd')
+    ax_heat.set_yticks(range(len(feature_names)))
+    ax_heat.set_yticklabels([feature_names[i] for i in sorted_idx], fontsize=8)
+
+    n_batches = len(batches)
+    tick_positions = np.linspace(0, n_batches - 1, min(_N_BINS, n_batches), dtype=int)
+    ax_heat.set_xticks(tick_positions)
+    ax_heat.set_xticklabels([batches[p] for p in tick_positions], rotation=45, ha='right', fontsize=8)
+    ax_heat.set_title('SHAP Feature Importance Over Time')
+    fig.colorbar(im, ax=ax_heat, label='Mean |SHAP value|')
+
+    fig.suptitle('SHAP Value Analysis', fontsize=14, fontweight='bold')
+    plt.tight_layout()
+
+    if save:
+        os.makedirs(_FIGURES_DIR, exist_ok=True)
+        out_path = os.path.join(_FIGURES_DIR, 'shap_summary.png')
+        fig.savefig(out_path, dpi=150, bbox_inches='tight')
+        print(f'SHAP chart saved to {os.path.abspath(out_path)}')
