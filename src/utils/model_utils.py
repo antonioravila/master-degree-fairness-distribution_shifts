@@ -1,6 +1,5 @@
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split
 
 
 def compute_batch_proportions(
@@ -162,15 +161,27 @@ def get_train_and_test(
     batches: pd.Series,
     i: int,
 ):
-    train_df = df.copy()
-
     if baseline_type in ['dynamic', 'abcinml']:
-        train_df = df[df[window_column].isin(batches[0:i+1])]
+        prior_batches = batches[0:i]
+        if len(prior_batches) == 0:
+            return None, None, None, None
 
-    X = train_df.drop(columns=[target_label, window_column])
-    y = train_df[target_label]
-    X_train, X_test, y_train, y_test = train_test_split(
-        X, y, test_size=0.33, random_state=42
-    )
+        train_df = df[df[window_column].isin(prior_batches)]
+        test_df = df[df[window_column] == batches[i]]
 
-    return X_train, y_train, X_test, y_test
+        X_train = train_df.drop(columns=[target_label, window_column])
+        y_train = train_df[target_label]
+        X_test = test_df.drop(columns=[target_label, window_column])
+        y_test = test_df[target_label]
+
+        return X_train, y_train, X_test, y_test
+
+    # vanilla, static: batch 0 → only train; batch i≥1 → only test
+    if i == 0:
+        X_train = df.drop(columns=[target_label, window_column])
+        y_train = df[target_label]
+        return X_train, y_train, None, None
+
+    X_test = df.drop(columns=[target_label, window_column])
+    y_test = df[target_label]
+    return None, None, X_test, y_test

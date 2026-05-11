@@ -42,9 +42,6 @@ def ABCInML(
             current_batch_df, sensitive_attribute, target_label
         )
 
-        for key in historical_proportions:
-            historical_proportions[key].append(current_proportions[key])
-
         if baseline_type in ['vanilla', 'static']:
             X_train, y_train, X_test, y_test = model_utils.get_train_and_test(
                 df=current_batch_df,
@@ -55,7 +52,7 @@ def ABCInML(
                 i=i,
             )
 
-            if i == 0:
+            if X_train is not None:
                 if baseline_type == 'static':
                     sample_weights = model_utils.reweigh_df(
                         X_train,
@@ -79,27 +76,28 @@ def ABCInML(
                 i=i,
             )
 
-            if baseline_type == 'abcinml':
-                forecasted_distributions = model_utils.forecast_joint_distributions(
-                    historical_proportions,
-                    window=forecast_window,
+            if X_train is not None:
+                if baseline_type == 'abcinml':
+                    forecasted_distributions = model_utils.forecast_joint_distributions(
+                        historical_proportions,
+                        window=forecast_window,
+                    )
+
+                sample_weights = model_utils.reweigh_df(
+                    X_train,
+                    y_train,
+                    sensitive_attribute,
+                    target_label,
+                    baseline_type,
+                    alpha=alpha,
+                    forecasted_distributions=forecasted_distributions,
                 )
 
-            sample_weights = model_utils.reweigh_df(
-                X_train,
-                y_train,
-                sensitive_attribute,
-                target_label,
-                baseline_type,
-                alpha=alpha,
-                forecasted_distributions=forecasted_distributions,
-            )
+                print('(1.1.2) training logistic regression model')
+                model = LogisticRegression(max_iter=_MAX_ITER)
+                model.fit(X_train, y_train, sample_weight=sample_weights)
 
-            print('(1.1.2) training logistic regression model')
-            model = LogisticRegression(max_iter=_MAX_ITER)
-            model.fit(X_train, y_train, sample_weight=sample_weights)
-
-        if i != 0:
+        if X_test is not None:
             y_pred = model.predict(X_test)
             y_pred_proba = model.predict_proba(X_test)
 
@@ -123,6 +121,9 @@ def ABCInML(
             shap_record['batch'] = str(batch)
             shap_record['alpha'] = alpha
             shap_records.append(shap_record)
+
+        for key in historical_proportions:
+            historical_proportions[key].append(current_proportions[key])
 
     temporal_metrics = metrics_utils.compute_temporal_metrics(assessment_metrics, alpha)
 
