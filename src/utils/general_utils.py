@@ -53,5 +53,6 @@ def initialize_variables(df, window_column):
     model = None
     sample_weights = None
     forecasted_distributions = None
+    shap_records = []
 
-    return batches, historical_proportions, assessment_metrics, model, sample_weights, forecasted_distributions
+    return batches, historical_proportions, assessment_metrics, model, sample_weights, forecasted_distributions, shap_records

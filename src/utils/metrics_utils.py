@@ -80,32 +80,68 @@ def generate_charts(
     baseline_type: str = '',
     save: bool = False,
 ) -> None:
-    fig, axes = plt.subplots(1, 5, figsize=(30, 5))
+    _MA_WINDOW = 10
+    N_COLS = len(_SNAPSHOT_METRICS)
 
-    alphas = assessment_results_df['alpha'].unique()
+    has_baselines = 'baseline' in assessment_results_df.columns
+    baselines = assessment_results_df['baseline'].unique().tolist() if has_baselines else [None]
+    n_rows = len(baselines)
 
     batch_labels = assessment_results_df['batch'].astype(str).unique().tolist()
+    alphas = assessment_results_df['alpha'].unique()
 
-    _MA_WINDOW = 10
+    fig, axes = plt.subplots(n_rows, N_COLS, figsize=(30, 5 * n_rows), squeeze=False)
+
     period_handles = []
 
-    for ax, (col, label) in zip(axes, _SNAPSHOT_METRICS):
-        handles = _add_period_spans(ax, batch_labels)
-        if not period_handles:
-            period_handles = handles
+    for row, bt in enumerate(baselines):
+        row_df = assessment_results_df[assessment_results_df['baseline'] == bt] if has_baselines else assessment_results_df
 
-        for alpha in alphas:
-            subset = assessment_results_df[assessment_results_df['alpha'] == alpha].reset_index(drop=True)
-            x_str = subset['batch'].astype(str).tolist()
-            y = subset[col]
-            ax.plot(x_str, y, marker='o', alpha=0.3, label=f'α={alpha}')
-            ma = y.rolling(window=_MA_WINDOW, min_periods=1).mean()
-            ax.plot(x_str, ma, linewidth=2, alpha=0.9, color='green', label=f'MA-{_MA_WINDOW} α={alpha}')
-        ax.set_title(label)
-        ax.set_ylabel(label)
-        _apply_bin_xticks(ax, batch_labels)
-        if len(alphas) > 1:
-            ax.legend(fontsize=7)
+        for col_idx, (col, label) in enumerate(_SNAPSHOT_METRICS):
+            ax = axes[row][col_idx]
+
+            handles = _add_period_spans(ax, batch_labels)
+            if not period_handles:
+                period_handles = handles
+
+            for alpha in alphas:
+                subset = row_df[row_df['alpha'] == alpha].reset_index(drop=True)
+                x_str = subset['batch'].astype(str).tolist()
+                y = subset[col]
+                ax.plot(x_str, y, marker='o', alpha=0.3, label=f'α={alpha}')
+                ma = y.rolling(window=_MA_WINDOW, min_periods=1).mean()
+                ax.plot(x_str, ma, linewidth=2, alpha=0.9, color='green', label=f'MA-{_MA_WINDOW} α={alpha}')
+
+            ax.set_title(label)
+            ax.set_ylabel(label)
+
+            if col_idx in (0, 1):
+                ax.set_ylim(0.60, 1.0)
+            elif col_idx == 2:
+                ax.set_ylim(0.0, 0.07)
+            elif col_idx == 3:
+                ax.set_ylim(0.0, 0.22)
+            elif col_idx == 4:
+                ax.set_ylim(0.0, 0.052)
+
+            _apply_bin_xticks(ax, batch_labels)
+
+            if len(alphas) > 1:
+                ax.legend(fontsize=7)
+
+        # baseline label centered above the row
+        if has_baselines and bt:
+            mid_ax = axes[row][N_COLS // 2]
+            mid_ax.annotate(
+                f'Baseline: {bt}',
+                xy=(0.5, 1.08),
+                xycoords='axes fraction',
+                ha='center',
+                va='bottom',
+                fontsize=11,
+                fontweight='bold',
+                bbox=dict(boxstyle='round,pad=0.4', facecolor='#f0f0f0', edgecolor='#888888', alpha=0.9),
+            )
 
     title = 'Model Performance & Fairness Metrics'
     if baseline_type:
@@ -128,9 +164,9 @@ def generate_charts(
 def compute_temporal_metrics(
     assessment_metrics: pd.DataFrame, alpha: float
 ) -> pd.DataFrame:
-    mb = assessment_metrics['sp'].max()
-    ts = abs(assessment_metrics['sp'].diff().mean())
-    mbd = abs(assessment_metrics['sp'].diff().max())
+    mb = assessment_metrics['sp'].abs().max()
+    ts = assessment_metrics['sp'].diff().abs().mean()
+    mbd = assessment_metrics['sp'].diff().abs().max()
 
     temporal_metrics = pd.DataFrame(
         {

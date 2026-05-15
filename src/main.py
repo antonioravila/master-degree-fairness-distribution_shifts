@@ -12,10 +12,10 @@ def ABCInML(
     target_label: str,
     baseline_type: str,
     alpha: float,
-    forecast_window: int = 3,
+    forecast_window: int = 6,
 ) -> None:
     
-    _MAX_ITER = 150
+    _MAX_ITER = 1000
 
     (
         batches,
@@ -24,10 +24,8 @@ def ABCInML(
         model,
         sample_weights,
         forecasted_distributions,
+        shap_records,
     ) = general_utils.initialize_variables(df, window_column)
-
-    shap_records = []
-
 
     print(f'(1) running with alpha: {alpha}')
 
@@ -132,19 +130,10 @@ def ABCInML(
     return assessment_metrics, temporal_metrics, shap_records
 
 
-def main():
-    warnings.filterwarnings('ignore', category=ConvergenceWarning)
+_ALL_BASELINES = ['vanilla', 'static', 'dynamic', 'abcinml']
 
-    alphas, baseline_type, sensitive_attribute, target_label, window_column = (
-        general_utils.parse_arguments()
-    )
 
-    df = data_utils.pre_process_df(
-        sensitive_attribute=sensitive_attribute,
-        sensitive_value=2,
-        favored_value=1,
-    )
-
+def _run_baseline(df, baseline_type, alphas, sensitive_attribute, target_label, window_column):
     assessment_results_df = pd.DataFrame()
     temporal_results_df = pd.DataFrame()
     shap_records = []
@@ -166,8 +155,40 @@ def main():
         temporal_results_df = pd.concat([temporal_results_df, temporal_metrics])
         shap_records.extend(alpha_shap_records)
 
-    metrics_utils.generate_charts(assessment_results_df, temporal_results_df, baseline_type=baseline_type, save=True)
-    metrics_utils.generate_shap_charts(shap_records, save=True)
+    return assessment_results_df, temporal_results_df, shap_records
+
+
+def main():
+    warnings.filterwarnings('ignore', category=ConvergenceWarning)
+
+    alphas, baseline_type, sensitive_attribute, target_label, window_column = (
+        general_utils.parse_arguments()
+    )
+
+    df = data_utils.pre_process_df(
+        sensitive_attribute=sensitive_attribute,
+        sensitive_value=2,
+        favored_value=1,
+    )
+
+    baselines = _ALL_BASELINES if baseline_type == 'all' else [baseline_type]
+
+    all_assessment_df = pd.DataFrame()
+    all_temporal_df = pd.DataFrame()
+    all_shap_records = []
+
+    for bt in baselines:
+        assessment_results_df, temporal_results_df, shap_records = _run_baseline(
+            df, bt, alphas, sensitive_attribute, target_label, window_column
+        )
+        assessment_results_df['baseline'] = bt
+        all_assessment_df = pd.concat([all_assessment_df, assessment_results_df])
+        all_temporal_df = pd.concat([all_temporal_df, temporal_results_df])
+        all_shap_records.extend(shap_records)
+
+    chart_label = 'all' if baseline_type == 'all' else baseline_type
+    metrics_utils.generate_charts(all_assessment_df, all_temporal_df, baseline_type=chart_label, save=True)
+    metrics_utils.generate_shap_charts(all_shap_records, save=True)
 
     print('finished training.')
 
