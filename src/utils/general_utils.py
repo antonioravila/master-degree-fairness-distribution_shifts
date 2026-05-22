@@ -18,8 +18,6 @@ def parse_arguments():
     target_label = args.target_label
     window_column = args.window_column
 
-    alpha = 0.5 if baseline_type != 'abcinml' else alpha
-
     if alpha == None:
         alphas = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]
     else:

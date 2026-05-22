@@ -79,6 +79,7 @@ def generate_charts(
     temporal_results_df: pd.DataFrame,
     baseline_type: str = '',
     save: bool = False,
+    subfolder: str = '',
 ) -> None:
     _MA_WINDOW = 10
     N_COLS = len(_SNAPSHOT_METRICS)
@@ -144,8 +145,6 @@ def generate_charts(
             )
 
     title = 'Model Performance & Fairness Metrics'
-    if baseline_type:
-        title += f'\nBaseline: {baseline_type}'
     fig.suptitle(title, fontsize=14, fontweight='bold')
 
     if period_handles:
@@ -155,8 +154,9 @@ def generate_charts(
     plt.tight_layout(rect=[0, 0.05, 1, 1])
 
     if save:
-        os.makedirs(_FIGURES_DIR, exist_ok=True)
-        out_path = os.path.join(_FIGURES_DIR, 'model_performance_metrics.png')
+        save_dir = os.path.join(_FIGURES_DIR, subfolder) if subfolder else _FIGURES_DIR
+        os.makedirs(save_dir, exist_ok=True)
+        out_path = os.path.join(save_dir, 'model_performance_metrics.png')
         fig.savefig(out_path, dpi=150, bbox_inches='tight')
         print(f'Chart saved to {os.path.abspath(out_path)}')
 
@@ -207,11 +207,227 @@ def compute_shap_values(model, X_test: pd.DataFrame) -> dict:
     return {'shap_values': values, 'feature_names': list(X_test.columns)}
 
 
-def generate_shap_charts(shap_records: list, save: bool = False) -> None:
+_BASELINE_COLORS = {
+    'vanilla':  '#555555',
+    'static':   '#1f77b4',
+    'dynamic':  '#ff7f0e',
+    'abcinml':  '#2ca02c',
+}
+
+_BASELINE_ORDER = ['vanilla', 'static', 'dynamic', 'abcinml']
+
+
+def _build_ma_series(df: pd.DataFrame, col: str, window: int) -> pd.Series:
+    """Return moving-average series sorted by batch, with datetime index."""
+    ordered = df.sort_values('batch_dt')
+    return ordered.set_index('batch_dt')[col].rolling(window=window, min_periods=1).mean()
+
+
+def generate_comparative_chart(
+    assessment_results_df: pd.DataFrame,
+    moving_avg_window: int = 5,
+    save: bool = False,
+    subfolder: str = '',
+) -> None:
+    """Overlay moving-average lines for all baselines, one subplot per metric."""
+    if 'baseline' not in assessment_results_df.columns:
+        raise ValueError("assessment_results_df must have a 'baseline' column")
+
+    df = assessment_results_df.copy()
+    df['batch_dt'] = pd.to_datetime([f'{b}-01' for b in df['batch'].astype(str)])
+
+    # For baselines where multiple alphas exist (abcinml), average across alphas first
+    df = df.groupby(['baseline', 'batch', 'batch_dt'], as_index=False)[
+        [col for col, _ in _SNAPSHOT_METRICS]
+    ].mean()
+
+    present_baselines = [b for b in _BASELINE_ORDER if b in df['baseline'].unique()]
+
+    # Common batch range across all baselines
+    common_dates = None
+    for bt in present_baselines:
+        dates = set(df[df['baseline'] == bt]['batch_dt'])
+        common_dates = dates if common_dates is None else common_dates & dates
+    common_dates = sorted(common_dates) if common_dates else []
+
+    N_COLS = len(_SNAPSHOT_METRICS)
+    fig, axes = plt.subplots(1, N_COLS, figsize=(28, 6), squeeze=False)
+    axes = axes[0]
+
+    period_handles = []
+    baseline_handles = []
+
+    # Use common batch labels list for xticks
+    all_batch_labels = sorted(df['batch'].astype(str).unique())
+
+    for col_idx, (col, label) in enumerate(_SNAPSHOT_METRICS):
+        ax = axes[col_idx]
+
+        handles = _add_period_spans(ax, all_batch_labels)
+        if not period_handles:
+            period_handles = handles
+
+        # Fairness reference lines
+        is_fairness = col in ('sp', 'tpr', 'fpr')
+        if is_fairness:
+            ax.axhline(y=0, color='black', linestyle='--', linewidth=1.0, alpha=0.5, zorder=2)
+
+        for bt in present_baselines:
+            sub = df[df['baseline'] == bt]
+            ma = _build_ma_series(sub, col, moving_avg_window)
+            # restrict to common dates
+            ma = ma[ma.index.isin(common_dates)] if common_dates else ma
+
+            x_pos = [all_batch_labels.index(d.strftime('%Y-%m')) for d in ma.index if d.strftime('%Y-%m') in all_batch_labels]
+            line, = ax.plot(
+                x_pos, ma.values,
+                color=_BASELINE_COLORS.get(bt, None),
+                linewidth=2.5,
+                label=bt,
+                zorder=3,
+            )
+            if col_idx == 0:
+                baseline_handles.append(line)
+
+        ax.set_title(label, fontsize=11, fontweight='bold')
+        ax.set_ylabel(label, fontsize=9)
+
+        if col_idx in (0, 1):
+            ax.set_ylim(0.60, 1.0)
+        elif col_idx == 2:
+            ax.set_ylim(-0.01, 0.07)
+        elif col_idx == 3:
+            ax.set_ylim(-0.01, 0.22)
+        elif col_idx == 4:
+            ax.set_ylim(-0.01, 0.052)
+
+        _apply_bin_xticks(ax, all_batch_labels)
+        ax.tick_params(axis='x', labelsize=8)
+
+    fig.suptitle(
+        f'Comparação de Baselines — Médias Móveis (janela = {moving_avg_window} batches)',
+        fontsize=13, fontweight='bold',
+    )
+
+    all_legend_handles = baseline_handles + period_handles
+    all_legend_labels = [h.get_label() for h in baseline_handles] + [h.get_label() for h in period_handles]
+    fig.legend(
+        all_legend_handles, all_legend_labels,
+        loc='lower center', ncol=len(all_legend_handles),
+        fontsize=9, framealpha=0.6, bbox_to_anchor=(0.5, -0.08),
+    )
+
+    plt.tight_layout(rect=[0, 0.06, 1, 1])
+
+    if save:
+        save_dir = os.path.join(_FIGURES_DIR, subfolder) if subfolder else _FIGURES_DIR
+        os.makedirs(save_dir, exist_ok=True)
+        out_path = os.path.join(save_dir, 'model_performance_comparison.png')
+        fig.savefig(out_path, dpi=120, bbox_inches='tight')
+        print(f'Comparative chart saved to {os.path.abspath(out_path)}')
+
+
+def generate_fairness_comparison_chart(
+    assessment_results_df: pd.DataFrame,
+    moving_avg_window: int = 5,
+    save: bool = False,
+    subfolder: str = '',
+) -> None:
+    """Overlay moving-average lines for all baselines, only fairness metrics (1×3 layout)."""
+    if 'baseline' not in assessment_results_df.columns:
+        raise ValueError("assessment_results_df must have a 'baseline' column")
+
+    _FAIRNESS_METRICS = [
+        ('sp',  'Demographic Parity Diff.'),
+        ('tpr', 'TPR Difference'),
+        ('fpr', 'FPR Difference'),
+    ]
+
+    df = assessment_results_df.copy()
+    df['batch_dt'] = pd.to_datetime([f'{b}-01' for b in df['batch'].astype(str)])
+    df = df.groupby(['baseline', 'batch', 'batch_dt'], as_index=False)[
+        [col for col, _ in _FAIRNESS_METRICS]
+    ].mean()
+
+    present_baselines = [b for b in _BASELINE_ORDER if b in df['baseline'].unique()]
+
+    common_dates = None
+    for bt in present_baselines:
+        dates = set(df[df['baseline'] == bt]['batch_dt'])
+        common_dates = dates if common_dates is None else common_dates & dates
+    common_dates = sorted(common_dates) if common_dates else []
+
+    all_batch_labels = sorted(df['batch'].astype(str).unique())
+
+    fig, axes = plt.subplots(1, 3, figsize=(21, 7), squeeze=False)
+    axes = axes[0]
+
+    period_handles = []
+    baseline_handles = []
+
+    for col_idx, (col, label) in enumerate(_FAIRNESS_METRICS):
+        ax = axes[col_idx]
+
+        handles = _add_period_spans(ax, all_batch_labels)
+        if not period_handles:
+            period_handles = handles
+
+        ax.axhline(y=0, color='black', linestyle='--', linewidth=1.2, alpha=0.6, zorder=2,
+                   label='Paridade perfeita (0)')
+        if col == 'tpr':
+            ax.axhline(y=0.1, color='red', linestyle='--', linewidth=1.0, alpha=0.5, zorder=2,
+                       label='Limiar violação TPR (0.1)')
+
+        for bt in present_baselines:
+            sub = df[df['baseline'] == bt]
+            ma = _build_ma_series(sub, col, moving_avg_window)
+            ma = ma[ma.index.isin(common_dates)] if common_dates else ma
+
+            x_pos = [all_batch_labels.index(d.strftime('%Y-%m')) for d in ma.index if d.strftime('%Y-%m') in all_batch_labels]
+            line, = ax.plot(
+                x_pos, ma.values,
+                color=_BASELINE_COLORS.get(bt, None),
+                linewidth=2.5,
+                label=bt,
+                zorder=3,
+            )
+            if col_idx == 0:
+                baseline_handles.append(line)
+
+        ax.set_title(label, fontsize=12, fontweight='bold')
+        ax.set_ylabel(label, fontsize=10)
+        _apply_bin_xticks(ax, all_batch_labels)
+        ax.tick_params(axis='x', labelsize=8)
+
+    fig.suptitle(
+        f'Métricas de Fairness — Médias Móveis por Baseline (janela = {moving_avg_window} batches)',
+        fontsize=13, fontweight='bold',
+    )
+
+    all_legend_handles = baseline_handles + period_handles
+    all_legend_labels = [h.get_label() for h in baseline_handles] + [h.get_label() for h in period_handles]
+    fig.legend(
+        all_legend_handles, all_legend_labels,
+        loc='lower center', ncol=len(all_legend_handles),
+        fontsize=10, framealpha=0.6, bbox_to_anchor=(0.5, -0.08),
+    )
+
+    plt.tight_layout(rect=[0, 0.06, 1, 1])
+
+    if save:
+        save_dir = os.path.join(_FIGURES_DIR, subfolder) if subfolder else _FIGURES_DIR
+        os.makedirs(save_dir, exist_ok=True)
+        out_path = os.path.join(save_dir, 'fairness_comparison_only.png')
+        fig.savefig(out_path, dpi=120, bbox_inches='tight')
+        print(f'Fairness comparison chart saved to {os.path.abspath(out_path)}')
+
+
+def generate_shap_charts(shap_records: list, save: bool = False, subfolder: str = '') -> None:
     if not shap_records:
         return
 
     feature_names = shap_records[0]['feature_names']
+    shap_records = sorted(shap_records, key=lambda r: pd.to_datetime(r['batch']))
     batches = [r['batch'] for r in shap_records]
 
     # mean |SHAP| per feature per batch → shape (n_batches, n_features)
@@ -246,11 +462,21 @@ def generate_shap_charts(shap_records: list, save: bool = False) -> None:
     ax_heat.set_title('SHAP Feature Importance Over Time')
     fig.colorbar(im, ax=ax_heat, label='Mean |SHAP value|')
 
+    batch_dates = pd.to_datetime([f'{b}-01' for b in batches])
+    for vline_dt, vline_label in _VLINES:
+        idxs = [i for i, d in enumerate(batch_dates) if d >= vline_dt]
+        if idxs:
+            x = min(idxs) - 0.5
+            ax_heat.axvline(x=x, color='#555555', linestyle='--', linewidth=0.8, alpha=0.5)
+            ax_heat.text(x, -0.5, vline_label, rotation=90, fontsize=6,
+                         va='bottom', ha='right', color='#555555')
+
     fig.suptitle('SHAP Value Analysis', fontsize=14, fontweight='bold')
     plt.tight_layout()
 
     if save:
-        os.makedirs(_FIGURES_DIR, exist_ok=True)
-        out_path = os.path.join(_FIGURES_DIR, 'shap_summary.png')
+        save_dir = os.path.join(_FIGURES_DIR, subfolder) if subfolder else _FIGURES_DIR
+        os.makedirs(save_dir, exist_ok=True)
+        out_path = os.path.join(save_dir, 'shap_summary.png')
         fig.savefig(out_path, dpi=150, bbox_inches='tight')
         print(f'SHAP chart saved to {os.path.abspath(out_path)}')

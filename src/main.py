@@ -12,7 +12,7 @@ def ABCInML(
     target_label: str,
     baseline_type: str,
     alpha: float,
-    forecast_window: int = 6,
+    forecast_window: int,
 ) -> None:
     
     _MAX_ITER = 1000
@@ -80,6 +80,10 @@ def ABCInML(
                         historical_proportions,
                         window=forecast_window,
                     )
+                    if forecasted_distributions is None:
+                        for key in historical_proportions:
+                            historical_proportions[key].append(current_proportions[key])
+                        continue
 
                 sample_weights = model_utils.reweigh_df(
                     X_train,
@@ -95,7 +99,7 @@ def ABCInML(
                 model = LogisticRegression(max_iter=_MAX_ITER)
                 model.fit(X_train, y_train, sample_weight=sample_weights)
 
-        if X_test is not None:
+        if X_test is not None and i >= forecast_window:
             y_pred = model.predict(X_test)
             y_pred_proba = model.predict_proba(X_test)
 
@@ -148,7 +152,7 @@ def _run_baseline(df, baseline_type, alphas, sensitive_attribute, target_label, 
             target_label=target_label,
             baseline_type=baseline_type,
             alpha=alpha,
-            forecast_window=3,
+            forecast_window=10,
         )
 
         assessment_results_df = pd.concat([assessment_results_df, assessment_metrics])
@@ -187,8 +191,23 @@ def main():
         all_shap_records.extend(shap_records)
 
     chart_label = 'all' if baseline_type == 'all' else baseline_type
-    metrics_utils.generate_charts(all_assessment_df, all_temporal_df, baseline_type=chart_label, save=True)
-    metrics_utils.generate_shap_charts(all_shap_records, save=True)
+    alpha_label = '_'.join(str(a) for a in alphas)
+    import os
+    subfolder = os.path.join(sensitive_attribute, alpha_label)
+    metrics_utils.generate_charts(all_assessment_df, all_temporal_df, baseline_type=chart_label, save=True, subfolder=subfolder)
+    metrics_utils.generate_shap_charts(all_shap_records, save=True, subfolder=subfolder)
+
+    # Save consolidated results
+    results_dir = os.path.join(os.path.dirname(__file__), '..', 'results')
+    os.makedirs(results_dir, exist_ok=True)
+    results_path = os.path.join(results_dir, 'assessment_all_baselines.csv')
+    all_assessment_df.to_csv(results_path, index=False)
+    print(f'Results saved to {os.path.abspath(results_path)}')
+
+    # Comparative charts (only when multiple baselines were run)
+    if len(baselines) > 1:
+        metrics_utils.generate_comparative_chart(all_assessment_df, moving_avg_window=5, save=True, subfolder=subfolder)
+        metrics_utils.generate_fairness_comparison_chart(all_assessment_df, moving_avg_window=5, save=True, subfolder=subfolder)
 
     print('finished training.')
 

@@ -80,12 +80,12 @@ def _convert_types(df):
         'SUPORT_VEN', 'RAIOX_RES', 'TOMO_RES', 'CLASSI_FIN',
     ]
     for col in multi_cat_cols:
-        df[col] = df[col].astype(str)
+        df[col] = pd.to_numeric(df[col], errors='coerce').astype(int).astype(str)
     df = pd.get_dummies(df, columns=multi_cat_cols, drop_first=True, dtype=int)
 
-    # CS_RACA: binarize 1 (Branca)→0, others→1
+    # CS_RACA: binarize 1 (Branca)→1 (privileged), others→0 (sensitive)
     df['CS_RACA'] = pd.to_numeric(df['CS_RACA'], errors='coerce')
-    df['CS_RACA'] = df['CS_RACA'].apply(lambda x: 0 if x == 1 else 1).astype(int)
+    df['CS_RACA'] = df['CS_RACA'].apply(lambda x: 1 if x == 1 else 0).astype(int)
 
     # EVOLUCAO: keep only 1 (Cura) and 2 (Óbito)
     df['EVOLUCAO'] = pd.to_numeric(df['EVOLUCAO'], errors='coerce')
