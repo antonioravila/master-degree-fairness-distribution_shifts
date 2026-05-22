@@ -93,6 +93,11 @@ def _convert_types(df):
     df['EVOLUCAO'] = df['EVOLUCAO'].map({1: 0, 2: 1}).astype(int)
 
     df = df[df['NU_IDADE_N'] < 120]
+
+    # IDADE_BIN must be derived before normalization (threshold is 65 real years)
+    # 0 = deprived (≥65, higher-risk elderly), 1 = favored (<65)
+    df['IDADE_BIN'] = (df['NU_IDADE_N'] < 65).astype(int)
+
     IDADE_MIN_TEORICA = 0
     IDADE_MAX_TEORICA = 100
     df['NU_IDADE_N'] = (df['NU_IDADE_N'] - IDADE_MIN_TEORICA) / (IDADE_MAX_TEORICA - IDADE_MIN_TEORICA)
@@ -114,5 +119,13 @@ def pre_process_df(
     
     df = df[df['YEAR-MONTH'].dt.year != 2018]
     df.sort_values(by='YEAR-MONTH', ascending=True, inplace=True)
+
+    # Drop correlated column to prevent leakage or redundancy
+    if sensitive_attribute == 'IDADE_BIN':
+        # NU_IDADE_N would trivially reconstruct IDADE_BIN — drop it
+        df = df.drop(columns=['NU_IDADE_N'])
+    else:
+        # IDADE_BIN is not the sensitive attribute; drop it so it's never a predictor
+        df = df.drop(columns=['IDADE_BIN'])
 
     return df

@@ -60,7 +60,7 @@ def ABCInML(
                         baseline_type,
                     )
 
-                print('(1.1.2) training logistic regression model')
+                print('(1.1.3) training logistic regression model')
                 model = LogisticRegression(max_iter=_MAX_ITER)
                 model.fit(X_train, y_train, sample_weight=sample_weights)
 
@@ -95,7 +95,7 @@ def ABCInML(
                     forecasted_distributions=forecasted_distributions,
                 )
 
-                print('(1.1.2) training logistic regression model')
+                print('(1.1.3) training logistic regression model')
                 model = LogisticRegression(max_iter=_MAX_ITER)
                 model.fit(X_train, y_train, sample_weight=sample_weights)
 
@@ -105,7 +105,7 @@ def ABCInML(
 
             sf_test = X_test[sensitive_attribute]
 
-            print('(1.1.3) testing logistic regression model')
+            print('(1.1.4) testing logistic regression model')
             acc, auc, sp, tpr, fpr = metrics_utils.compute_snapshot_metrics(
                 y_test, y_pred, y_pred_proba, sf_test
             )

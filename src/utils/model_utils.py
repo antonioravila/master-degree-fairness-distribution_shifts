@@ -144,7 +144,7 @@ def reweigh_df(
     w_current = weight_estimation(train_df, sensitive_attribute, target_label)
 
     if baseline_type == 'abcinml' and forecasted_distributions is not None:
-        print('(1.1.4) forecasting distributions')
+        print('(1.1.2) forecasting distributions')
         w_future = weight_estimation_anticipated(forecasted_distributions)
         w_new = alpha * w_current + (1 - alpha) * w_future
     else:
