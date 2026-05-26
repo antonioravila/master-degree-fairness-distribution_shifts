@@ -186,6 +186,7 @@ def main():
             df, bt, alphas, sensitive_attribute, target_label, window_column
         )
         assessment_results_df['baseline'] = bt
+        temporal_results_df['baseline'] = bt
         all_assessment_df = pd.concat([all_assessment_df, assessment_results_df])
         all_temporal_df = pd.concat([all_temporal_df, temporal_results_df])
         all_shap_records.extend(shap_records)
@@ -198,11 +199,10 @@ def main():
     metrics_utils.generate_shap_charts(all_shap_records, save=True, subfolder=subfolder)
 
     # Save consolidated results
-    results_dir = os.path.join(os.path.dirname(__file__), '..', 'results')
+    results_dir = os.path.join(os.path.dirname(__file__), 'results', sensitive_attribute, alpha_label)
     os.makedirs(results_dir, exist_ok=True)
-    results_path = os.path.join(results_dir, 'assessment_all_baselines.csv')
-    all_assessment_df.to_csv(results_path, index=False)
-    print(f'Results saved to {os.path.abspath(results_path)}')
+    all_assessment_df.to_csv(os.path.join(results_dir, 'assessment_all_baselines.csv'), index=False)
+    temporal_results_df.to_csv(os.path.join(results_dir, 'temporal_results_df.csv'), index=False)
 
     # Comparative charts (only when multiple baselines were run)
     if len(baselines) > 1:
