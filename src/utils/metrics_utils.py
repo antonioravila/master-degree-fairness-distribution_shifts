@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from matplotlib.gridspec import GridSpec
-from sklearn.metrics import accuracy_score, roc_auc_score
+from sklearn.metrics import accuracy_score, roc_auc_score, confusion_matrix
 from fairlearn.metrics import (
     demographic_parity_difference,
     true_positive_rate_difference,
@@ -180,25 +180,35 @@ def compute_temporal_metrics(
 
 
 def compute_snapshot_metrics(
-    y_test: pd.DataFrame,
-    y_pred: pd.DataFrame,
+    y_test: pd.Series,
+    y_pred: np.array,
     y_pred_proba: np.array,
-    sensitive_features: str,
+    sensitive_features: pd.Series,
 ) -> tuple[float]:
+    
+    def _group_rates(y_test, y_pred, sensitive_features, sensitive_value):
+        mask = sensitive_features == sensitive_value
+        tn, fp, fn, tp = confusion_matrix(y_test[mask], y_pred[mask], labels=[0, 1]).ravel()
+        tpr = tp / (tp + fn) if (tp + fn) > 0 else np.nan
+        fpr = fp / (fp + tn) if (fp + tn) > 0 else np.nan
+        return tpr, fpr
+
+    tpr_S0, fpr_S0 = _group_rates(y_test, y_pred, sensitive_features, 0)
+    tpr_S1, fpr_S1 = _group_rates(y_test, y_pred, sensitive_features, 1)
 
     acc = accuracy_score(y_test, y_pred)
     auc = roc_auc_score(y_test, y_pred_proba[:, 1])
-    sp = demographic_parity_difference(
+    sp_diff = demographic_parity_difference(
         y_true=y_test, y_pred=y_pred, sensitive_features=sensitive_features
     )
-    tpr = true_positive_rate_difference(
+    tpr_diff = true_positive_rate_difference(
         y_true=y_test, y_pred=y_pred, sensitive_features=sensitive_features
     )
-    fpr = false_positive_rate_difference(
+    fpr_diff = false_positive_rate_difference(
         y_true=y_test, y_pred=y_pred, sensitive_features=sensitive_features
     )
 
-    return acc, auc, sp, tpr, fpr
+    return acc, auc, sp_diff, tpr_diff, fpr_diff, tpr_S0, fpr_S0, tpr_S1, fpr_S1
 
 
 def compute_shap_values(model, X_test: pd.DataFrame) -> dict:
@@ -420,6 +430,94 @@ def generate_fairness_comparison_chart(
         out_path = os.path.join(save_dir, 'fairness_comparison_only.png')
         fig.savefig(out_path, dpi=120, bbox_inches='tight')
         print(f'Fairness comparison chart saved to {os.path.abspath(out_path)}')
+
+
+def generate_absolute_rates_chart(
+    all_absolute_df: pd.DataFrame,
+    save: bool = False,
+    subfolder: str = '',
+) -> None:
+    """Grid N×2: each row = one baseline, col 1 = TPR by group, col 2 = FPR by group."""
+    _MA_WINDOW = 10
+    _S0_COLOR = '#1f77b4'
+    _S1_COLOR = '#ff7f0e'
+
+    df = all_absolute_df.copy()
+    df['batch_dt'] = pd.to_datetime([f'{b}-01' for b in df['batch'].astype(str)])
+
+    rate_cols = ['tpr_S0', 'fpr_S0', 'tpr_S1', 'fpr_S1']
+    df = df.groupby(['baseline', 'batch', 'batch_dt'], as_index=False)[rate_cols].mean()
+
+    present_baselines = [b for b in _BASELINE_ORDER if b in df['baseline'].unique()]
+    n_rows = len(present_baselines)
+    all_batch_labels = sorted(df['batch'].astype(str).unique())
+
+    fig, axes = plt.subplots(n_rows, 2, figsize=(16, 5 * n_rows), squeeze=False)
+
+    period_handles = []
+
+    _RATE_PAIRS = [
+        ('tpr_S0', 'tpr_S1', 'TPR (True Positive Rate)'),
+        ('fpr_S0', 'fpr_S1', 'FPR (False Positive Rate)'),
+    ]
+
+    for row, bt in enumerate(present_baselines):
+        sub = df[df['baseline'] == bt].sort_values('batch_dt').reset_index(drop=True)
+        x_str = sub['batch'].astype(str).tolist()
+        x_idx = [all_batch_labels.index(b) for b in x_str if b in all_batch_labels]
+
+        for col_idx, (col_s0, col_s1, col_label) in enumerate(_RATE_PAIRS):
+            ax = axes[row][col_idx]
+
+            handles = _add_period_spans(ax, all_batch_labels)
+            if not period_handles:
+                period_handles = handles
+
+            ma_s0 = sub[col_s0].rolling(window=_MA_WINDOW, min_periods=1).mean().values
+            ma_s1 = sub[col_s1].rolling(window=_MA_WINDOW, min_periods=1).mean().values
+
+            ax.plot(x_idx, ma_s0, color=_S0_COLOR, linewidth=2.0, label='S0 (deprived)')
+            ax.plot(x_idx, ma_s1, color=_S1_COLOR, linewidth=2.0, label='S1 (favored)')
+            ax.fill_between(x_idx, ma_s0, ma_s1, alpha=0.15, color='gray')
+
+            ax.set_title(col_label, fontsize=10)
+            ax.set_ylabel(col_label, fontsize=9)
+            ax.legend(fontsize=8)
+            _apply_bin_xticks(ax, all_batch_labels)
+            ax.tick_params(axis='x', labelsize=8)
+
+        # Baseline label above the row (on right column, matching generate_charts style)
+        axes[row][1].annotate(
+            f'Baseline: {bt}',
+            xy=(0.5, 1.08),
+            xycoords='axes fraction',
+            ha='center',
+            va='bottom',
+            fontsize=11,
+            fontweight='bold',
+            bbox=dict(boxstyle='round,pad=0.4', facecolor='#f0f0f0', edgecolor='#888888', alpha=0.9),
+        )
+
+    fig.suptitle('Taxas Absolutas TPR e FPR por Grupo Sensível', fontsize=14, fontweight='bold')
+
+    if period_handles:
+        fig.legend(
+            handles=period_handles,
+            loc='lower center',
+            ncol=len(_PERIOD_SPANS),
+            fontsize=9,
+            framealpha=0.5,
+            bbox_to_anchor=(0.5, -0.05),
+        )
+
+    plt.tight_layout(rect=[0, 0.04, 1, 1])
+
+    if save:
+        save_dir = os.path.join(_FIGURES_DIR, subfolder) if subfolder else _FIGURES_DIR
+        os.makedirs(save_dir, exist_ok=True)
+        out_path = os.path.join(save_dir, 'absolute_rates_by_group.png')
+        fig.savefig(out_path, dpi=150, bbox_inches='tight')
+        print(f'Absolute rates chart saved to {os.path.abspath(out_path)}')
 
 
 def generate_shap_charts(shap_records: list, save: bool = False, subfolder: str = '') -> None:

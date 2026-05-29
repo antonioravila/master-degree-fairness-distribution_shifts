@@ -48,9 +48,20 @@ def initialize_variables(df, window_column):
         }
     )
 
+    absolute_rates = pd.DataFrame(
+        {
+            'batch': [],
+            'alpha': [],
+            'tpr_S0': [],
+            'fpr_S0': [],
+            'tpr_S1': [],
+            'fpr_S1': [],
+        }
+    )
+
     model = None
     sample_weights = None
     forecasted_distributions = None
     shap_records = []
 
-    return batches, historical_proportions, assessment_metrics, model, sample_weights, forecasted_distributions, shap_records
+    return batches, historical_proportions, assessment_metrics, model, sample_weights, forecasted_distributions, shap_records, absolute_rates
