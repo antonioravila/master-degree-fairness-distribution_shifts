@@ -63,13 +63,13 @@ def weight_estimation(
     positve = df[df[target_label] == 1].shape[0]
     negative = df[df[target_label] == 0].shape[0]
 
-    deprived = (df[df[sensitive_attribute] == 0]).shape[0]
-    favored = (df[df[sensitive_attribute] == 1]).shape[0]
+    deprived = (df[df[sensitive_attribute] == 1]).shape[0]
+    favored = (df[df[sensitive_attribute] == 0]).shape[0]
 
-    DP = df[(df[sensitive_attribute] == 0) & (df[target_label] == 1)].shape[0]
-    DN = df[(df[sensitive_attribute] == 0) & (df[target_label] == 0)].shape[0]
-    FP = df[(df[sensitive_attribute] == 1) & (df[target_label] == 1)].shape[0]
-    FN = df[(df[sensitive_attribute] == 1) & (df[target_label] == 0)].shape[0]
+    DP = df[(df[sensitive_attribute] == 1) & (df[target_label] == 1)].shape[0]
+    DN = df[(df[sensitive_attribute] == 1) & (df[target_label] == 0)].shape[0]
+    FP = df[(df[sensitive_attribute] == 0) & (df[target_label] == 1)].shape[0]
+    FN = df[(df[sensitive_attribute] == 0) & (df[target_label] == 0)].shape[0]
 
     W_DP = (deprived * positve) / (n * DP)
     W_DN = (deprived * negative) / (n * DN)
@@ -89,15 +89,15 @@ def weight_estimation_anticipated(
 
     n = p_S0_Y1 + p_S0_Y0 + p_S1_Y1 + p_S1_Y0
 
-    deprived = p_S0_Y1 + p_S0_Y0
-    favored = p_S1_Y1 + p_S1_Y0
+    deprived = p_S1_Y1 + p_S1_Y0
+    favored = p_S0_Y1 + p_S0_Y0
     positive = p_S0_Y1 + p_S1_Y1
     negative = p_S0_Y0 + p_S1_Y0
 
-    W_DP = (deprived * positive) / (n * p_S0_Y1)
-    W_DN = (deprived * negative) / (n * p_S0_Y0)
-    W_FP = (favored * positive) / (n * p_S1_Y1)
-    W_FN = (favored * negative) / (n * p_S1_Y0)
+    W_DP = (deprived * positive) / (n * p_S1_Y1)
+    W_DN = (deprived * negative) / (n * p_S1_Y0)
+    W_FP = (favored * positive) / (n * p_S0_Y1)
+    W_FN = (favored * negative) / (n * p_S0_Y0)
 
     return np.array([W_DP, W_DN, W_FP, W_FN])
 
@@ -112,16 +112,16 @@ def reweighing(
     df_['weight'] = np.ones(len(df_))
 
     df_['weight'] = np.where(
-        (df_[sensitive_attribute] == 0) & (df_[target_label] == 1), W_DP, df_['weight']
+        (df_[sensitive_attribute] == 1) & (df_[target_label] == 1), W_DP, df_['weight']
     )
     df_['weight'] = np.where(
-        (df_[sensitive_attribute] == 0) & (df_[target_label] == 0), W_DN, df_['weight']
+        (df_[sensitive_attribute] == 1) & (df_[target_label] == 0), W_DN, df_['weight']
     )
     df_['weight'] = np.where(
-        (df_[sensitive_attribute] == 1) & (df_[target_label] == 1), W_FP, df_['weight']
+        (df_[sensitive_attribute] == 0) & (df_[target_label] == 1), W_FP, df_['weight']
     )
     df_['weight'] = np.where(
-        (df_[sensitive_attribute] == 1) & (df_[target_label] == 0), W_FN, df_['weight']
+        (df_[sensitive_attribute] == 0) & (df_[target_label] == 0), W_FN, df_['weight']
     )
 
     return df_

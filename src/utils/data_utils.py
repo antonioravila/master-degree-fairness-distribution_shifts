@@ -83,9 +83,9 @@ def _convert_types(df):
         df[col] = pd.to_numeric(df[col], errors='coerce').astype(int).astype(str)
     df = pd.get_dummies(df, columns=multi_cat_cols, drop_first=True, dtype=int)
 
-    # CS_RACA: binarize 1 (Branca)→1 (privileged), others→0 (sensitive)
+    # CS_RACA: 0 = Branca (privileged), 1 = não-Branca (sensitive)
     df['CS_RACA'] = pd.to_numeric(df['CS_RACA'], errors='coerce')
-    df['CS_RACA'] = df['CS_RACA'].apply(lambda x: 1 if x == 1 else 0).astype(int)
+    df['CS_RACA'] = df['CS_RACA'].apply(lambda x: 0 if x == 1 else 1).astype(int)
 
     # EVOLUCAO: keep only 1 (Cura) and 2 (Óbito)
     df['EVOLUCAO'] = pd.to_numeric(df['EVOLUCAO'], errors='coerce')
@@ -95,8 +95,8 @@ def _convert_types(df):
     df = df[df['NU_IDADE_N'] < 120]
 
     # IDADE_BIN must be derived before normalization (threshold is 65 real years)
-    # 0 = deprived (≥65, higher-risk elderly), 1 = favored (<65)
-    df['IDADE_BIN'] = (df['NU_IDADE_N'] < 65).astype(int)
+    # IDADE_BIN: 0 = não-idoso (<65, privileged), 1 = idoso (≥65, sensitive)
+    df['IDADE_BIN'] = (df['NU_IDADE_N'] >= 65).astype(int)
 
     IDADE_MIN_TEORICA = 0
     IDADE_MAX_TEORICA = 100

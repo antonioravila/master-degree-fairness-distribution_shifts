@@ -107,7 +107,7 @@ def ABCInML(
             sf_test = X_test[sensitive_attribute]
 
             print('(1.1.4) testing logistic regression model')
-            acc, auc, sp, tpr_diff, fpr_diff, tpr_S0, fpr_S0, tpr_S1, tpr_S1 = metrics_utils.compute_snapshot_metrics(
+            acc, auc, sp, tpr_diff, fpr_diff, tpr_S0, fpr_S0, tpr_S1, fpr_S1 = metrics_utils.compute_snapshot_metrics(
                 y_test, y_pred, y_pred_proba, sf_test
             )
             assessment_metrics.loc[len(assessment_metrics)] = [
@@ -121,7 +121,7 @@ def ABCInML(
             ]
 
             absolute_rates.loc[len(absolute_rates)] = [
-                batch, alpha, tpr_S0, fpr_S0, tpr_S1, tpr_S1
+                batch, alpha, tpr_S0, fpr_S0, tpr_S1, fpr_S1
             ]
 
             shap_record = metrics_utils.compute_shap_values(model, X_test)
@@ -219,6 +219,7 @@ def main():
     if len(baselines) > 1:
         metrics_utils.generate_comparative_chart(all_assessment_df, moving_avg_window=5, save=True, subfolder=subfolder)
         metrics_utils.generate_fairness_comparison_chart(all_assessment_df, moving_avg_window=5, save=True, subfolder=subfolder)
+        metrics_utils.generate_absolute_rates_chart(all_absolute_df, save=True, subfolder=subfolder)
 
     print('finished training.')
 

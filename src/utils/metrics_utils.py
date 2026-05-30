@@ -439,8 +439,8 @@ def generate_absolute_rates_chart(
 ) -> None:
     """Grid N×2: each row = one baseline, col 1 = TPR by group, col 2 = FPR by group."""
     _MA_WINDOW = 10
-    _S0_COLOR = '#1f77b4'
-    _S1_COLOR = '#ff7f0e'
+    _S0_COLOR = '#ff7f0e'
+    _S1_COLOR = '#1f77b4'
 
     df = all_absolute_df.copy()
     df['batch_dt'] = pd.to_datetime([f'{b}-01' for b in df['batch'].astype(str)])
@@ -476,8 +476,8 @@ def generate_absolute_rates_chart(
             ma_s0 = sub[col_s0].rolling(window=_MA_WINDOW, min_periods=1).mean().values
             ma_s1 = sub[col_s1].rolling(window=_MA_WINDOW, min_periods=1).mean().values
 
-            ax.plot(x_idx, ma_s0, color=_S0_COLOR, linewidth=2.0, label='S0 (deprived)')
-            ax.plot(x_idx, ma_s1, color=_S1_COLOR, linewidth=2.0, label='S1 (favored)')
+            ax.plot(x_idx, ma_s0, color=_S0_COLOR, linewidth=2.0, label='S0 (privileged)')
+            ax.plot(x_idx, ma_s1, color=_S1_COLOR, linewidth=2.0, label='S1 (sensitive)')
             ax.fill_between(x_idx, ma_s0, ma_s1, alpha=0.15, color='gray')
 
             ax.set_title(col_label, fontsize=10)
