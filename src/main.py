@@ -5,7 +5,7 @@ from sklearn.exceptions import ConvergenceWarning
 from utils import general_utils, metrics_utils, model_utils, data_utils
 
 
-def ABCInML(
+def run_baseline(
     df: pd.DataFrame,
     window_column: str,
     sensitive_attribute: str,
@@ -13,6 +13,7 @@ def ABCInML(
     baseline_type: str,
     alpha: float,
     forecast_window: int,
+    model: str
 ) -> None:
     
     _MAX_ITER = 1000
@@ -62,7 +63,9 @@ def ABCInML(
                     )
 
                 print('(1.1.3) training logistic regression model')
-                model = LogisticRegression(max_iter=_MAX_ITER)
+
+                model = model_utils.initialize_model(model)
+
                 model.fit(X_train, y_train, sample_weight=sample_weights)
 
         if baseline_type in ['dynamic', 'abcinml']:
@@ -142,7 +145,7 @@ def ABCInML(
 _ALL_BASELINES = ['vanilla', 'static', 'dynamic', 'abcinml']
 
 
-def _run_baseline(df, baseline_type, alphas, sensitive_attribute, target_label, window_column):
+def run(df, baseline_type, alphas, sensitive_attribute, target_label, window_column, model):
     assessment_results_df = pd.DataFrame()
     temporal_results_df = pd.DataFrame()
     absolute_rates_df = pd.DataFrame()
@@ -151,7 +154,7 @@ def _run_baseline(df, baseline_type, alphas, sensitive_attribute, target_label, 
     print(f'--- Running baseline: {baseline_type} ---\n')
 
     for alpha in alphas:
-        assessment_metrics, temporal_metrics, alpha_shap_records, absolute_rates = ABCInML(
+        assessment_metrics, temporal_metrics, alpha_shap_records, absolute_rates = run_model(
             df=df,
             window_column=window_column,
             sensitive_attribute=sensitive_attribute,
@@ -172,7 +175,7 @@ def _run_baseline(df, baseline_type, alphas, sensitive_attribute, target_label, 
 def main():
     warnings.filterwarnings('ignore', category=ConvergenceWarning)
 
-    alphas, baseline_type, sensitive_attribute, target_label, window_column = (
+    alphas, baseline_type, sensitive_attribute, target_label, window_column, model = (
         general_utils.parse_arguments()
     )
 
@@ -190,9 +193,31 @@ def main():
     all_shap_records = []
 
     for bt in baselines:
-        assessment_results_df, temporal_results_df, shap_records, absolute_rates_df = _run_baseline(
-            df, bt, alphas, sensitive_attribute, target_label, window_column
+        
+        assessment_results_df = pd.DataFrame()
+    temporal_results_df = pd.DataFrame()
+    absolute_rates_df = pd.DataFrame()
+    shap_records = []
+
+    print(f'--- Running baseline: {baseline_type} ---\n')
+
+    for alpha in alphas:
+        assessment_metrics, temporal_metrics, alpha_shap_records, absolute_rates = run_baseline(
+            df=df,
+            window_column=window_column,
+            sensitive_attribute=sensitive_attribute,
+            target_label=target_label,
+            baseline_type=baseline_type,
+            alpha=alpha,
+            forecast_window=10,
+            model=model
         )
+
+        assessment_results_df = pd.concat([assessment_results_df, assessment_metrics])
+        temporal_results_df = pd.concat([temporal_results_df, temporal_metrics])
+        absolute_rates_df = pd.concat([absolute_rates_df, absolute_rates])
+        shap_records.extend(alpha_shap_records)
+
         assessment_results_df['baseline'] = bt
         temporal_results_df['baseline'] = bt
         absolute_rates_df['baseline'] = bt
