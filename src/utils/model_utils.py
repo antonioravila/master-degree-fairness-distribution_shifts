@@ -1,6 +1,14 @@
 import pandas as pd
 import numpy as np
 
+def initialize_model(model):
+    models_mapping = {
+        'logistic_regression': LogisticRegression(max_iter=_MAX_ITER),
+        'xgboost': xgb.XGBClassifier()
+    }
+
+    model = model_utils.get()
+    return model
 
 def compute_batch_proportions(
     batch_df: pd.DataFrame,
