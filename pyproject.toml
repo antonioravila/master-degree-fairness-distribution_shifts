@@ -13,6 +13,7 @@ dependencies = [
     "scikit-learn>=1.8.0",
     "seaborn>=0.13.2",
     "shap>=0.51.0",
+    "xgboost>=3.2.0",
 ]
 
 [tool.ruff.format]

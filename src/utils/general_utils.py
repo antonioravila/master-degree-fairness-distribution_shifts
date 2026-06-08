@@ -9,7 +9,8 @@ def parse_arguments():
     parser.add_argument('--sensitive_attribute', type=str)
     parser.add_argument('--target_label', type=str)
     parser.add_argument('--window_column', type=str)
-    parser.add_argument('--model', type=str)
+    parser.add_argument('--model_name', type=str)
+    parser.add_argument('--test_run', type=str, default='False')
 
     args = parser.parse_args()
 
@@ -18,13 +19,15 @@ def parse_arguments():
     sensitive_attribute = args.sensitive_attribute
     target_label = args.target_label
     window_column = args.window_column
-    model = args.model
+    model_name = args.model_name
+    test_run = eval(args.test_run)
+    
     if alpha == None:
         alphas = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]
     else:
         alphas = [alpha]
 
-    return alphas, baseline_type,sensitive_attribute, target_label, window_column, model
+    return alphas, baseline_type,sensitive_attribute, target_label, window_column, model_name, test_run
 
 
 def initialize_variables(df, window_column):

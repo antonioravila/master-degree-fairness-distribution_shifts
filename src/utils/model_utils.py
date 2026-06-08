@@ -1,13 +1,15 @@
 import pandas as pd
 import numpy as np
+import xgboost as xgb
+from sklearn.linear_model import LogisticRegression
 
-def initialize_model(model):
+def initialize_model(model_name, MAX_ITER):
     models_mapping = {
-        'logistic_regression': LogisticRegression(max_iter=_MAX_ITER),
+        'logistic_regression': LogisticRegression(max_iter=MAX_ITER),
         'xgboost': xgb.XGBClassifier()
     }
 
-    model = model_utils.get()
+    model = models_mapping.get(model_name)
     return model
 
 def compute_batch_proportions(

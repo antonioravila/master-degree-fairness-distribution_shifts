@@ -40,6 +40,28 @@ _VLINES = [
 ]
 
 
+def generate_all_charts(baseline_type, baselines, alphas, sensitive_attribute, all_assessment_df, all_temporal_df, all_absolute_df, all_shap_records, model_name):
+    chart_label = 'all' if baseline_type == 'all' else baseline_type
+    alpha_label = '_'.join(str(a) for a in alphas)
+    subfolder = os.path.join(sensitive_attribute, alpha_label)
+    _generate_performance_charts(all_assessment_df, all_temporal_df, baseline_type=chart_label, save=True, subfolder=subfolder)
+    if model_name != 'xgboost':
+        _generate_shap_charts(all_shap_records, save=True, subfolder=subfolder)
+
+    # Save consolidated results
+    results_dir = os.path.join(os.path.dirname(__file__), 'results', sensitive_attribute, alpha_label)
+    os.makedirs(results_dir, exist_ok=True)
+    all_assessment_df.to_csv(os.path.join(results_dir, 'assessment_all_baselines.csv'), index=False)
+    all_temporal_df.to_csv(os.path.join(results_dir, 'temporal_results_df.csv'), index=False)
+    all_absolute_df.to_csv(os.path.join(results_dir, 'absolute_results_df.csv'), index=False)
+
+    # Comparative charts (only when multiple baselines were run)
+    if len(baselines) > 1:
+        _generate_comparative_chart(all_assessment_df, moving_avg_window=5, save=True, subfolder=subfolder)
+        _generate_fairness_comparison_chart(all_assessment_df, moving_avg_window=5, save=True, subfolder=subfolder)
+        _generate_absolute_rates_chart(all_absolute_df, save=True, subfolder=subfolder)
+
+
 def _apply_bin_xticks(ax, labels: list, n_bins: int = _N_BINS) -> None:
     n = len(labels)
     positions = np.linspace(0, n - 1, min(n_bins, n), dtype=int)
@@ -74,7 +96,7 @@ def _add_period_spans(ax, batch_labels: list) -> list:
     return handles
 
 
-def generate_charts(
+def _generate_performance_charts(
     assessment_results_df: pd.DataFrame,
     temporal_results_df: pd.DataFrame,
     baseline_type: str = '',
@@ -211,8 +233,13 @@ def compute_snapshot_metrics(
     return acc, auc, sp_diff, tpr_diff, fpr_diff, tpr_S0, fpr_S0, tpr_S1, fpr_S1
 
 
-def compute_shap_values(model, X_test: pd.DataFrame) -> dict:
-    explainer = shap.LinearExplainer(model, X_test)
+def compute_shap_values(model_name, model, X_test: pd.DataFrame) -> dict:
+    if model_name.lower() == 'xgboost':
+        explainer = shap.TreeExplainer(model)
+    elif model_name.lower() == 'logistic_regression':
+        explainer = shap.LinearExplainer(model, X_test)
+    else: raise ValueError(f"Unsupported model_name: {model_name}")
+
     values = explainer.shap_values(X_test)
     return {'shap_values': values, 'feature_names': list(X_test.columns)}
 
@@ -233,7 +260,7 @@ def _build_ma_series(df: pd.DataFrame, col: str, window: int) -> pd.Series:
     return ordered.set_index('batch_dt')[col].rolling(window=window, min_periods=1).mean()
 
 
-def generate_comparative_chart(
+def _generate_comparative_chart(
     assessment_results_df: pd.DataFrame,
     moving_avg_window: int = 5,
     save: bool = False,
@@ -337,7 +364,7 @@ def generate_comparative_chart(
         print(f'Comparative chart saved to {os.path.abspath(out_path)}')
 
 
-def generate_fairness_comparison_chart(
+def _generate_fairness_comparison_chart(
     assessment_results_df: pd.DataFrame,
     moving_avg_window: int = 5,
     save: bool = False,
@@ -432,7 +459,7 @@ def generate_fairness_comparison_chart(
         print(f'Fairness comparison chart saved to {os.path.abspath(out_path)}')
 
 
-def generate_absolute_rates_chart(
+def _generate_absolute_rates_chart(
     all_absolute_df: pd.DataFrame,
     save: bool = False,
     subfolder: str = '',
@@ -520,7 +547,7 @@ def generate_absolute_rates_chart(
         print(f'Absolute rates chart saved to {os.path.abspath(out_path)}')
 
 
-def generate_shap_charts(shap_records: list, save: bool = False, subfolder: str = '') -> None:
+def _generate_shap_charts(shap_records: list, save: bool = False, subfolder: str = '') -> None:
     if not shap_records:
         return
 

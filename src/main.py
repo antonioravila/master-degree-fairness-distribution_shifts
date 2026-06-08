@@ -1,5 +1,4 @@
 import pandas as pd
-from sklearn.linear_model import LogisticRegression
 import warnings
 from sklearn.exceptions import ConvergenceWarning
 from utils import general_utils, metrics_utils, model_utils, data_utils
@@ -13,9 +12,9 @@ def run_baseline(
     baseline_type: str,
     alpha: float,
     forecast_window: int,
-    model: str
+    model_name: str,
 ) -> None:
-    
+
     _MAX_ITER = 1000
 
     (
@@ -26,7 +25,7 @@ def run_baseline(
         sample_weights,
         forecasted_distributions,
         shap_records,
-        absolute_rates
+        absolute_rates,
     ) = general_utils.initialize_variables(df, window_column)
 
     print(f'(1) running with alpha: {alpha}')
@@ -62,9 +61,9 @@ def run_baseline(
                         baseline_type,
                     )
 
-                print('(1.1.3) training logistic regression model')
+                print(f'(1.1.3) training {model_name} model')
 
-                model = model_utils.initialize_model(model)
+                model = model_utils.initialize_model(model_name, MAX_ITER=_MAX_ITER)
 
                 model.fit(X_train, y_train, sample_weight=sample_weights)
 
@@ -99,20 +98,25 @@ def run_baseline(
                     forecasted_distributions=forecasted_distributions,
                 )
 
-                print('(1.1.3) training logistic regression model')
-                model = LogisticRegression(max_iter=_MAX_ITER)
+                print(f'(1.1.3) training {model_name} model')
+                model = model_utils.initialize_model(model_name, MAX_ITER=_MAX_ITER)
                 model.fit(X_train, y_train, sample_weight=sample_weights)
 
-        if X_test is not None and i >= forecast_window:
+        should_test = X_test is not None and i >= forecast_window
+
+        if should_test:
             y_pred = model.predict(X_test)
             y_pred_proba = model.predict_proba(X_test)
 
             sf_test = X_test[sensitive_attribute]
 
-            print('(1.1.4) testing logistic regression model')
-            acc, auc, sp, tpr_diff, fpr_diff, tpr_S0, fpr_S0, tpr_S1, fpr_S1 = metrics_utils.compute_snapshot_metrics(
-                y_test, y_pred, y_pred_proba, sf_test
+            print(f'(1.1.4) testing {model_name} model')
+            acc, auc, sp, tpr_diff, fpr_diff, tpr_S0, fpr_S0, tpr_S1, fpr_S1 = (
+                metrics_utils.compute_snapshot_metrics(
+                    y_test, y_pred, y_pred_proba, sf_test
+                )
             )
+
             assessment_metrics.loc[len(assessment_metrics)] = [
                 acc,
                 auc,
@@ -124,10 +128,15 @@ def run_baseline(
             ]
 
             absolute_rates.loc[len(absolute_rates)] = [
-                batch, alpha, tpr_S0, fpr_S0, tpr_S1, fpr_S1
+                batch,
+                alpha,
+                tpr_S0,
+                fpr_S0,
+                tpr_S1,
+                fpr_S1,
             ]
 
-            shap_record = metrics_utils.compute_shap_values(model, X_test)
+            shap_record = metrics_utils.compute_shap_values(model_name, model, X_test)
             shap_record['batch'] = str(batch)
             shap_record['alpha'] = alpha
             shap_records.append(shap_record)
@@ -142,40 +151,12 @@ def run_baseline(
     return assessment_metrics, temporal_metrics, shap_records, absolute_rates
 
 
-_ALL_BASELINES = ['vanilla', 'static', 'dynamic', 'abcinml']
-
-
-def run(df, baseline_type, alphas, sensitive_attribute, target_label, window_column, model):
-    assessment_results_df = pd.DataFrame()
-    temporal_results_df = pd.DataFrame()
-    absolute_rates_df = pd.DataFrame()
-    shap_records = []
-
-    print(f'--- Running baseline: {baseline_type} ---\n')
-
-    for alpha in alphas:
-        assessment_metrics, temporal_metrics, alpha_shap_records, absolute_rates = run_model(
-            df=df,
-            window_column=window_column,
-            sensitive_attribute=sensitive_attribute,
-            target_label=target_label,
-            baseline_type=baseline_type,
-            alpha=alpha,
-            forecast_window=10,
-        )
-
-        assessment_results_df = pd.concat([assessment_results_df, assessment_metrics])
-        temporal_results_df = pd.concat([temporal_results_df, temporal_metrics])
-        absolute_rates_df = pd.concat([absolute_rates_df, absolute_rates])
-        shap_records.extend(alpha_shap_records)
-
-    return assessment_results_df, temporal_results_df, shap_records, absolute_rates_df
-
-
 def main():
     warnings.filterwarnings('ignore', category=ConvergenceWarning)
 
-    alphas, baseline_type, sensitive_attribute, target_label, window_column, model = (
+    _ALL_BASELINES = ['vanilla', 'static', 'dynamic', 'abcinml']
+
+    alphas, baseline_type, sensitive_attribute, target_label, window_column, model_name, test_run = (
         general_utils.parse_arguments()
     )
 
@@ -184,6 +165,9 @@ def main():
         sensitive_value=2,
         favored_value=1,
     )
+    
+    if test_run:
+        df = df.iloc[:500000].copy()    
 
     baselines = _ALL_BASELINES if baseline_type == 'all' else [baseline_type]
 
@@ -192,59 +176,53 @@ def main():
     all_absolute_df = pd.DataFrame()
     all_shap_records = []
 
-    for bt in baselines:
-        
+    for baseline_type in baselines:
         assessment_results_df = pd.DataFrame()
-    temporal_results_df = pd.DataFrame()
-    absolute_rates_df = pd.DataFrame()
-    shap_records = []
+        temporal_results_df = pd.DataFrame()
+        absolute_rates_df = pd.DataFrame()
+        shap_records = []
 
-    print(f'--- Running baseline: {baseline_type} ---\n')
+        print(f'--- Running baseline: {baseline_type} ---\n')
 
-    for alpha in alphas:
-        assessment_metrics, temporal_metrics, alpha_shap_records, absolute_rates = run_baseline(
-            df=df,
-            window_column=window_column,
-            sensitive_attribute=sensitive_attribute,
-            target_label=target_label,
-            baseline_type=baseline_type,
-            alpha=alpha,
-            forecast_window=10,
-            model=model
-        )
+        for alpha in alphas:
+            assessment_metrics, temporal_metrics, alpha_shap_records, absolute_rates = (
+                run_baseline(
+                    df=df,
+                    window_column=window_column,
+                    sensitive_attribute=sensitive_attribute,
+                    target_label=target_label,
+                    baseline_type=baseline_type,
+                    alpha=alpha,
+                    forecast_window=10,
+                    model_name=model_name,
+                )
+            )
 
-        assessment_results_df = pd.concat([assessment_results_df, assessment_metrics])
-        temporal_results_df = pd.concat([temporal_results_df, temporal_metrics])
-        absolute_rates_df = pd.concat([absolute_rates_df, absolute_rates])
-        shap_records.extend(alpha_shap_records)
+            assessment_results_df = pd.concat([assessment_results_df, assessment_metrics])
+            temporal_results_df = pd.concat([temporal_results_df, temporal_metrics])
+            absolute_rates_df = pd.concat([absolute_rates_df, absolute_rates])
+            shap_records.extend(alpha_shap_records)
 
-        assessment_results_df['baseline'] = bt
-        temporal_results_df['baseline'] = bt
-        absolute_rates_df['baseline'] = bt
-        all_assessment_df = pd.concat([all_assessment_df, assessment_results_df])
-        all_temporal_df = pd.concat([all_temporal_df, temporal_results_df])
-        all_absolute_df = pd.concat([all_absolute_df, absolute_rates_df])
-        all_shap_records.extend(shap_records)
+            assessment_results_df['baseline'] = baseline_type
+            temporal_results_df['baseline'] = baseline_type
+            absolute_rates_df['baseline'] = baseline_type
 
-    chart_label = 'all' if baseline_type == 'all' else baseline_type
-    alpha_label = '_'.join(str(a) for a in alphas)
-    import os
-    subfolder = os.path.join(sensitive_attribute, alpha_label)
-    metrics_utils.generate_charts(all_assessment_df, all_temporal_df, baseline_type=chart_label, save=True, subfolder=subfolder)
-    metrics_utils.generate_shap_charts(all_shap_records, save=True, subfolder=subfolder)
+            all_assessment_df = pd.concat([all_assessment_df, assessment_results_df])
+            all_temporal_df = pd.concat([all_temporal_df, temporal_results_df])
+            all_absolute_df = pd.concat([all_absolute_df, absolute_rates_df])
+            all_shap_records.extend(shap_records)
 
-    # Save consolidated results
-    results_dir = os.path.join(os.path.dirname(__file__), 'results', sensitive_attribute, alpha_label)
-    os.makedirs(results_dir, exist_ok=True)
-    all_assessment_df.to_csv(os.path.join(results_dir, 'assessment_all_baselines.csv'), index=False)
-    all_temporal_df.to_csv(os.path.join(results_dir, 'temporal_results_df.csv'), index=False)
-    all_absolute_df.to_csv(os.path.join(results_dir, 'absolute_results_df.csv'), index=False)
-
-    # Comparative charts (only when multiple baselines were run)
-    if len(baselines) > 1:
-        metrics_utils.generate_comparative_chart(all_assessment_df, moving_avg_window=5, save=True, subfolder=subfolder)
-        metrics_utils.generate_fairness_comparison_chart(all_assessment_df, moving_avg_window=5, save=True, subfolder=subfolder)
-        metrics_utils.generate_absolute_rates_chart(all_absolute_df, save=True, subfolder=subfolder)
+    metrics_utils.generate_all_charts(
+        baseline_type,
+        baselines,
+        alphas,
+        sensitive_attribute,
+        all_assessment_df,
+        all_temporal_df,
+        all_absolute_df,
+        all_shap_records,
+        model_name,
+    )
 
     print('finished training.')
 
