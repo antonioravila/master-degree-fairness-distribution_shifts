@@ -40,16 +40,17 @@ _VLINES = [
 ]
 
 
-def generate_all_charts(baseline_type, baselines, alphas, sensitive_attribute, all_assessment_df, all_temporal_df, all_absolute_df, all_shap_records, model_name):
+def generate_all_charts(baseline_type, baselines, alphas, sensitive_attribute, all_assessment_df, all_temporal_df, all_absolute_df, all_shap_records, model_name, forecast_window):
     chart_label = 'all' if baseline_type == 'all' else baseline_type
     alpha_label = '_'.join(str(a) for a in alphas)
-    subfolder = os.path.join(sensitive_attribute, alpha_label)
+    run_folder = f'{model_name}_alpha_{alpha_label}_window_{forecast_window}'
+    subfolder = os.path.join(sensitive_attribute, run_folder)
     _generate_performance_charts(all_assessment_df, all_temporal_df, baseline_type=chart_label, save=True, subfolder=subfolder)
     if model_name != 'xgboost':
         _generate_shap_charts(all_shap_records, save=True, subfolder=subfolder)
 
     # Save consolidated results
-    results_dir = os.path.join(os.path.dirname(__file__), 'results', sensitive_attribute, alpha_label)
+    results_dir = os.path.join(os.path.dirname(__file__), 'results', sensitive_attribute, run_folder)
     os.makedirs(results_dir, exist_ok=True)
     all_assessment_df.to_csv(os.path.join(results_dir, 'assessment_all_baselines.csv'), index=False)
     all_temporal_df.to_csv(os.path.join(results_dir, 'temporal_results_df.csv'), index=False)
@@ -113,6 +114,15 @@ def _generate_performance_charts(
     batch_labels = assessment_results_df['batch'].astype(str).unique().tolist()
     alphas = assessment_results_df['alpha'].unique()
 
+    metric_ylims = {}
+    for col, _ in _SNAPSHOT_METRICS:
+        values = assessment_results_df[col].dropna()
+        if len(values) == 0:
+            continue
+        vmin, vmax = values.min(), values.max()
+        padding = (vmax - vmin) * 0.05
+        metric_ylims[col] = (vmin - padding, vmax + padding)
+
     fig, axes = plt.subplots(n_rows, N_COLS, figsize=(30, 5 * n_rows), squeeze=False)
 
     period_handles = []
@@ -138,14 +148,8 @@ def _generate_performance_charts(
             ax.set_title(label)
             ax.set_ylabel(label)
 
-            if col_idx in (0, 1):
-                ax.set_ylim(0.60, 1.0)
-            elif col_idx == 2:
-                ax.set_ylim(0.0, 0.07)
-            elif col_idx == 3:
-                ax.set_ylim(0.0, 0.22)
-            elif col_idx == 4:
-                ax.set_ylim(0.0, 0.052)
+            if col in metric_ylims:
+                ax.set_ylim(metric_ylims[col])
 
             _apply_bin_xticks(ax, batch_labels)
 
@@ -287,6 +291,15 @@ def _generate_comparative_chart(
         common_dates = dates if common_dates is None else common_dates & dates
     common_dates = sorted(common_dates) if common_dates else []
 
+    metric_ylims = {}
+    for col, _ in _SNAPSHOT_METRICS:
+        values = assessment_results_df[col].dropna()
+        if len(values) == 0:
+            continue
+        vmin, vmax = values.min(), values.max()
+        padding = (vmax - vmin) * 0.05
+        metric_ylims[col] = (vmin - padding, vmax + padding)
+
     N_COLS = len(_SNAPSHOT_METRICS)
     fig, axes = plt.subplots(1, N_COLS, figsize=(28, 6), squeeze=False)
     axes = axes[0]
@@ -329,14 +342,8 @@ def _generate_comparative_chart(
         ax.set_title(label, fontsize=11, fontweight='bold')
         ax.set_ylabel(label, fontsize=9)
 
-        if col_idx in (0, 1):
-            ax.set_ylim(0.60, 1.0)
-        elif col_idx == 2:
-            ax.set_ylim(-0.01, 0.07)
-        elif col_idx == 3:
-            ax.set_ylim(-0.01, 0.22)
-        elif col_idx == 4:
-            ax.set_ylim(-0.01, 0.052)
+        if col in metric_ylims:
+            ax.set_ylim(metric_ylims[col])
 
         _apply_bin_xticks(ax, all_batch_labels)
         ax.tick_params(axis='x', labelsize=8)
@@ -479,13 +486,23 @@ def _generate_absolute_rates_chart(
     n_rows = len(present_baselines)
     all_batch_labels = sorted(df['batch'].astype(str).unique())
 
+    tpr_values = pd.concat([df['tpr_S0'], df['tpr_S1']])
+    tpr_min, tpr_max = tpr_values.min(), tpr_values.max()
+    tpr_padding = (tpr_max - tpr_min) * 0.05
+    tpr_ylim = (tpr_min - tpr_padding, tpr_max + tpr_padding)
+
+    fpr_values = pd.concat([df['fpr_S0'], df['fpr_S1']])
+    fpr_min, fpr_max = fpr_values.min(), fpr_values.max()
+    fpr_padding = (fpr_max - fpr_min) * 0.05
+    fpr_ylim = (fpr_min - fpr_padding, fpr_max + fpr_padding)
+
     fig, axes = plt.subplots(n_rows, 2, figsize=(16, 5 * n_rows), squeeze=False)
 
     period_handles = []
 
     _RATE_PAIRS = [
-        ('tpr_S0', 'tpr_S1', 'TPR (True Positive Rate)'),
-        ('fpr_S0', 'fpr_S1', 'FPR (False Positive Rate)'),
+        ('tpr_S0', 'tpr_S1', 'TPR (True Positive Rate)', tpr_ylim),
+        ('fpr_S0', 'fpr_S1', 'FPR (False Positive Rate)', fpr_ylim),
     ]
 
     for row, bt in enumerate(present_baselines):
@@ -493,7 +510,7 @@ def _generate_absolute_rates_chart(
         x_str = sub['batch'].astype(str).tolist()
         x_idx = [all_batch_labels.index(b) for b in x_str if b in all_batch_labels]
 
-        for col_idx, (col_s0, col_s1, col_label) in enumerate(_RATE_PAIRS):
+        for col_idx, (col_s0, col_s1, col_label, ylim) in enumerate(_RATE_PAIRS):
             ax = axes[row][col_idx]
 
             handles = _add_period_spans(ax, all_batch_labels)
@@ -509,6 +526,7 @@ def _generate_absolute_rates_chart(
 
             ax.set_title(col_label, fontsize=10)
             ax.set_ylabel(col_label, fontsize=9)
+            ax.set_ylim(ylim)
             ax.legend(fontsize=8)
             _apply_bin_xticks(ax, all_batch_labels)
             ax.tick_params(axis='x', labelsize=8)

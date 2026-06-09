@@ -30,6 +30,8 @@ def run_baseline(
 
     print(f'(1) running with alpha: {alpha}')
 
+    accumulated_train_df = pd.DataFrame()
+
     for i in range(len(batches)):
         batch = batches[i]
 
@@ -68,14 +70,13 @@ def run_baseline(
                 model.fit(X_train, y_train, sample_weight=sample_weights)
 
         if baseline_type in ['dynamic', 'abcinml']:
-            X_train, y_train, X_test, y_test = model_utils.get_train_and_test(
-                df=df,
-                baseline_type=baseline_type,
-                window_column=window_column,
-                target_label=target_label,
-                batches=batches,
-                i=i,
-            )
+            if i == 0:
+                X_train, y_train, X_test, y_test = None, None, None, None
+            else:
+                X_train = accumulated_train_df.drop(columns=[target_label, window_column])
+                y_train = accumulated_train_df[target_label]
+                X_test = current_batch_df.drop(columns=[target_label, window_column])
+                y_test = current_batch_df[target_label]
 
             if X_train is not None:
                 if baseline_type == 'abcinml':
@@ -86,6 +87,7 @@ def run_baseline(
                     if forecasted_distributions is None:
                         for key in historical_proportions:
                             historical_proportions[key].append(current_proportions[key])
+                        accumulated_train_df = pd.concat([accumulated_train_df, current_batch_df], ignore_index=True)
                         continue
 
                 sample_weights = model_utils.reweigh_df(
@@ -141,6 +143,8 @@ def run_baseline(
             shap_record['alpha'] = alpha
             shap_records.append(shap_record)
 
+        accumulated_train_df = pd.concat([accumulated_train_df, current_batch_df], ignore_index=True)
+
         for key in historical_proportions:
             historical_proportions[key].append(current_proportions[key])
 
@@ -167,7 +171,7 @@ def main():
     )
     
     if test_run:
-        df = df.iloc[:500000].copy()    
+        df = df.iloc[:800000].copy()    
 
     baselines = _ALL_BASELINES if baseline_type == 'all' else [baseline_type]
 
@@ -175,6 +179,8 @@ def main():
     all_temporal_df = pd.DataFrame()
     all_absolute_df = pd.DataFrame()
     all_shap_records = []
+
+    forecast_window = 10
 
     for baseline_type in baselines:
         assessment_results_df = pd.DataFrame()
@@ -193,7 +199,7 @@ def main():
                     target_label=target_label,
                     baseline_type=baseline_type,
                     alpha=alpha,
-                    forecast_window=10,
+                    forecast_window=forecast_window,
                     model_name=model_name,
                 )
             )
@@ -222,6 +228,7 @@ def main():
         all_absolute_df,
         all_shap_records,
         model_name,
+        forecast_window,
     )
 
     print('finished training.')
