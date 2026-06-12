@@ -40,17 +40,16 @@ _VLINES = [
 ]
 
 
-def generate_all_charts(baseline_type, baselines, alphas, sensitive_attribute, all_assessment_df, all_temporal_df, all_absolute_df, all_shap_records, model_name, forecast_window):
+def generate_all_charts(baseline_type, baselines, alpha, sensitive_attribute, all_assessment_df, all_temporal_df, all_absolute_df, all_shap_records, model_name, forecast_window):
     chart_label = 'all' if baseline_type == 'all' else baseline_type
-    alpha_label = '_'.join(str(a) for a in alphas)
-    run_folder = f'{model_name}_alpha_{alpha_label}_window_{forecast_window}'
+    run_folder = f'{model_name}_alpha_{alpha}_reweighing_forecasting_sma_window_{forecast_window}'
     subfolder = os.path.join(sensitive_attribute, run_folder)
     _generate_performance_charts(all_assessment_df, all_temporal_df, baseline_type=chart_label, save=True, subfolder=subfolder)
     if model_name != 'xgboost':
         _generate_shap_charts(all_shap_records, save=True, subfolder=subfolder)
 
     # Save consolidated results
-    results_dir = os.path.join(os.path.dirname(__file__), 'results', sensitive_attribute, run_folder)
+    results_dir = os.path.join('src', 'results', sensitive_attribute, run_folder)
     os.makedirs(results_dir, exist_ok=True)
     all_assessment_df.to_csv(os.path.join(results_dir, 'assessment_all_baselines.csv'), index=False)
     all_temporal_df.to_csv(os.path.join(results_dir, 'temporal_results_df.csv'), index=False)
