@@ -40,9 +40,9 @@ _VLINES = [
 ]
 
 
-def generate_all_charts(baseline_type, baselines, alpha, sensitive_attribute, all_assessment_df, all_temporal_df, all_absolute_df, all_shap_records, model_name, forecast_window):
+def generate_all_charts(baseline_type, baselines, alpha, sensitive_attribute, all_assessment_df, all_temporal_df, all_absolute_df, all_shap_records, model_name, forecast_window, forecasting_technique):
     chart_label = 'all' if baseline_type == 'all' else baseline_type
-    run_folder = f'{model_name}_alpha_{alpha}_reweighing_forecasting_sma_window_{forecast_window}'
+    run_folder = f'{model_name}_alpha_{alpha}_{forecasting_technique}_window_{forecast_window}'
     subfolder = os.path.join(sensitive_attribute, run_folder)
     _generate_performance_charts(all_assessment_df, all_temporal_df, baseline_type=chart_label, save=True, subfolder=subfolder)
     if model_name != 'xgboost':

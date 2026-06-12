@@ -49,6 +49,7 @@ def compute_batch_proportions(
 def forecast_joint_distributions(
     historical_proportions: dict[str, list[float]],
     window: int,
+    forecasting_technique: str,
 ) -> dict[str, float] | None:
     first_history = next(iter(historical_proportions.values()))
     if len(first_history) < window:
@@ -57,8 +58,11 @@ def forecast_joint_distributions(
     forecasted = {}
     for key, history in historical_proportions.items():
         series = pd.Series(history)
-        rolling_avg = series.rolling(window=window, min_periods=window).mean()
-        forecasted[key] = float(rolling_avg.iloc[-1])
+        if forecasting_technique == 'ema':
+            avg = series.ewm(span=window, min_periods=window).mean()
+        elif forecasting_technique == 'sma':
+            avg = series.rolling(window=window, min_periods=window).mean()
+        forecasted[key] = float(avg.iloc[-1])
 
     return forecasted
 
