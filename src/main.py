@@ -13,6 +13,7 @@ def run_baseline(
     alpha: float,
     forecast_window: int,
     model_name: str,
+    forecasting_technique: str,
 ) -> None:
 
     _MAX_ITER = 1000
@@ -83,6 +84,7 @@ def run_baseline(
                     forecasted_distributions = model_utils.forecast_joint_distributions(
                         historical_proportions,
                         window=forecast_window,
+                        forecasting_technique=forecasting_technique,
                     )
                     if forecasted_distributions is None:
                         for key in historical_proportions:
@@ -160,7 +162,7 @@ def main():
 
     _ALL_BASELINES = ['vanilla', 'static', 'dynamic', 'abcinml']
 
-    alphas, baseline_type, sensitive_attribute, target_label, window_column, model_name, test_run = (
+    alphas, baseline_type, sensitive_attribute, target_label, window_column, model_name, test_run, forecasting_technique = (
         general_utils.parse_arguments()
     )
 
@@ -196,6 +198,7 @@ def main():
                     alpha=alpha,
                     forecast_window=forecast_window,
                     model_name=model_name,
+                    forecasting_technique=forecasting_technique,
                 )
             )
 
@@ -219,6 +222,7 @@ def main():
             all_shap_records,
             model_name,
             forecast_window,
+            forecasting_technique,
         )
 
     print('finished training.')
