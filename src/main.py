@@ -162,7 +162,7 @@ def main():
 
     _ALL_BASELINES = ['vanilla', 'static', 'dynamic', 'abcinml']
 
-    alphas, baseline_type, sensitive_attribute, target_label, window_column, model_name, test_run, forecasting_technique = (
+    alphas, baseline_type, sensitive_attribute, target_label, window_column, model_name, test_run, forecasting_technique, forecast_window = (
         general_utils.parse_arguments()
     )
 
@@ -176,8 +176,6 @@ def main():
         df = df.iloc[:500000].copy()    
 
     baselines = _ALL_BASELINES if baseline_type == 'all' else [baseline_type]
-
-    forecast_window = 10
 
     for alpha in alphas:
         all_assessment_df = pd.DataFrame()
@@ -205,6 +203,11 @@ def main():
             assessment_metrics['baseline'] = bt
             temporal_metrics['baseline'] = bt
             absolute_rates['baseline'] = bt
+
+            for df in (assessment_metrics, temporal_metrics, absolute_rates):
+                df['model_name'] = model_name
+                df['forecast_window'] = forecast_window
+                df['forecasting_technique'] = forecasting_technique
 
             all_assessment_df = pd.concat([all_assessment_df, assessment_metrics], ignore_index=True)
             all_temporal_df = pd.concat([all_temporal_df, temporal_metrics], ignore_index=True)

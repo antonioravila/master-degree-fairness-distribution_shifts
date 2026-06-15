@@ -58,7 +58,6 @@ def generate_all_charts(baseline_type, baselines, alpha, sensitive_attribute, al
     # Comparative charts (only when multiple baselines were run)
     if len(baselines) > 1:
         _generate_comparative_chart(all_assessment_df, moving_avg_window=5, save=True, subfolder=subfolder)
-        _generate_fairness_comparison_chart(all_assessment_df, moving_avg_window=5, save=True, subfolder=subfolder)
         _generate_absolute_rates_chart(all_absolute_df, save=True, subfolder=subfolder)
 
 
@@ -368,101 +367,6 @@ def _generate_comparative_chart(
         out_path = os.path.join(save_dir, 'model_performance_comparison.png')
         fig.savefig(out_path, dpi=120, bbox_inches='tight')
         print(f'Comparative chart saved to {os.path.abspath(out_path)}')
-
-
-def _generate_fairness_comparison_chart(
-    assessment_results_df: pd.DataFrame,
-    moving_avg_window: int = 5,
-    save: bool = False,
-    subfolder: str = '',
-) -> None:
-    """Overlay moving-average lines for all baselines, only fairness metrics (1×3 layout)."""
-    if 'baseline' not in assessment_results_df.columns:
-        raise ValueError("assessment_results_df must have a 'baseline' column")
-
-    _FAIRNESS_METRICS = [
-        ('sp',  'Demographic Parity Diff.'),
-        ('tpr', 'TPR Difference'),
-        ('fpr', 'FPR Difference'),
-    ]
-
-    df = assessment_results_df.copy()
-    df['batch_dt'] = pd.to_datetime([f'{b}-01' for b in df['batch'].astype(str)])
-    df = df.groupby(['baseline', 'batch', 'batch_dt'], as_index=False)[
-        [col for col, _ in _FAIRNESS_METRICS]
-    ].mean()
-
-    present_baselines = [b for b in _BASELINE_ORDER if b in df['baseline'].unique()]
-
-    common_dates = None
-    for bt in present_baselines:
-        dates = set(df[df['baseline'] == bt]['batch_dt'])
-        common_dates = dates if common_dates is None else common_dates & dates
-    common_dates = sorted(common_dates) if common_dates else []
-
-    all_batch_labels = sorted(df['batch'].astype(str).unique())
-
-    fig, axes = plt.subplots(1, 3, figsize=(21, 7), squeeze=False)
-    axes = axes[0]
-
-    period_handles = []
-    baseline_handles = []
-
-    for col_idx, (col, label) in enumerate(_FAIRNESS_METRICS):
-        ax = axes[col_idx]
-
-        handles = _add_period_spans(ax, all_batch_labels)
-        if not period_handles:
-            period_handles = handles
-
-        ax.axhline(y=0, color='black', linestyle='--', linewidth=1.2, alpha=0.6, zorder=2,
-                   label='Paridade perfeita (0)')
-        if col == 'tpr':
-            ax.axhline(y=0.1, color='red', linestyle='--', linewidth=1.0, alpha=0.5, zorder=2,
-                       label='Limiar violação TPR (0.1)')
-
-        for bt in present_baselines:
-            sub = df[df['baseline'] == bt]
-            ma = _build_ma_series(sub, col, moving_avg_window)
-            ma = ma[ma.index.isin(common_dates)] if common_dates else ma
-
-            x_pos = [all_batch_labels.index(d.strftime('%Y-%m')) for d in ma.index if d.strftime('%Y-%m') in all_batch_labels]
-            line, = ax.plot(
-                x_pos, ma.values,
-                color=_BASELINE_COLORS.get(bt, None),
-                linewidth=2.5,
-                label=bt,
-                zorder=3,
-            )
-            if col_idx == 0:
-                baseline_handles.append(line)
-
-        ax.set_title(label, fontsize=12, fontweight='bold')
-        ax.set_ylabel(label, fontsize=10)
-        _apply_bin_xticks(ax, all_batch_labels)
-        ax.tick_params(axis='x', labelsize=8)
-
-    fig.suptitle(
-        f'Métricas de Fairness — Médias Móveis por Baseline (janela = {moving_avg_window} batches)',
-        fontsize=13, fontweight='bold',
-    )
-
-    all_legend_handles = baseline_handles + period_handles
-    all_legend_labels = [h.get_label() for h in baseline_handles] + [h.get_label() for h in period_handles]
-    fig.legend(
-        all_legend_handles, all_legend_labels,
-        loc='lower center', ncol=len(all_legend_handles),
-        fontsize=10, framealpha=0.6, bbox_to_anchor=(0.5, -0.08),
-    )
-
-    plt.tight_layout(rect=[0, 0.06, 1, 1])
-
-    if save:
-        save_dir = os.path.join(_FIGURES_DIR, subfolder) if subfolder else _FIGURES_DIR
-        os.makedirs(save_dir, exist_ok=True)
-        out_path = os.path.join(save_dir, 'fairness_comparison_only.png')
-        fig.savefig(out_path, dpi=120, bbox_inches='tight')
-        print(f'Fairness comparison chart saved to {os.path.abspath(out_path)}')
 
 
 def _generate_absolute_rates_chart(
