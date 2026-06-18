@@ -3,7 +3,6 @@ import shap
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
-from matplotlib.gridspec import GridSpec
 from sklearn.metrics import accuracy_score, roc_auc_score, confusion_matrix
 from fairlearn.metrics import (
     demographic_parity_difference,
@@ -18,8 +17,6 @@ _SNAPSHOT_METRICS = [
     ('tpr', 'TPR Difference'),
     ('fpr', 'FPR Difference'),
 ]
-
-_TEMPORAL_METRICS = ['Maximum Bias', 'Temporal Stability', 'Maximum Bias Difference']
 
 _FIGURES_DIR = os.path.join(os.path.dirname(__file__), '..', 'figures')
 _N_BINS = 6
@@ -40,13 +37,13 @@ _VLINES = [
 ]
 
 
-def generate_all_charts(baseline_type, baselines, alpha, sensitive_attribute, all_assessment_df, all_temporal_df, all_absolute_df, all_shap_records, model_name, forecast_window, forecasting_technique):
+def generate_all_charts(baseline_type, baselines, alpha, sensitive_attribute, all_assessment_df, all_temporal_df, all_absolute_df, all_shap_records, model_name, forecast_window, forecasting_technique, batch_type):
     chart_label = 'all' if baseline_type == 'all' else baseline_type
-    run_folder = f'{model_name}_alpha_{alpha}_{forecasting_technique}_window_{forecast_window}'
+    run_folder = f'{model_name}_alpha_{alpha}_{forecasting_technique}_window_{forecast_window}_{batch_type}'
     subfolder = os.path.join(sensitive_attribute, run_folder)
-    _generate_performance_charts(all_assessment_df, all_temporal_df, baseline_type=chart_label, save=True, subfolder=subfolder)
+    _generate_performance_charts(all_assessment_df, all_temporal_df, baseline_type=chart_label, save=True, subfolder=subfolder, model_name=model_name, forecast_window=forecast_window)
     if model_name != 'xgboost':
-        _generate_shap_charts(all_shap_records, save=True, subfolder=subfolder)
+        _generate_shap_charts(all_shap_records, save=True, subfolder=subfolder, model_name=model_name, forecast_window=forecast_window)
 
     # Save consolidated results
     results_dir = os.path.join('src', 'results', sensitive_attribute, run_folder)
@@ -57,8 +54,8 @@ def generate_all_charts(baseline_type, baselines, alpha, sensitive_attribute, al
 
     # Comparative charts (only when multiple baselines were run)
     if len(baselines) > 1:
-        _generate_comparative_chart(all_assessment_df, moving_avg_window=5, save=True, subfolder=subfolder)
-        _generate_absolute_rates_chart(all_absolute_df, save=True, subfolder=subfolder)
+        _generate_comparative_chart(all_assessment_df, moving_avg_window=5, save=True, subfolder=subfolder, model_name=model_name, forecast_window=forecast_window)
+        _generate_absolute_rates_chart(all_absolute_df, save=True, subfolder=subfolder, model_name=model_name, forecast_window=forecast_window)
 
 
 def _apply_bin_xticks(ax, labels: list, n_bins: int = _N_BINS) -> None:
@@ -101,6 +98,8 @@ def _generate_performance_charts(
     baseline_type: str = '',
     save: bool = False,
     subfolder: str = '',
+    model_name: str = '',
+    forecast_window: int = 0,
 ) -> None:
     _MA_WINDOW = 10
     N_COLS = len(_SNAPSHOT_METRICS)
@@ -168,7 +167,7 @@ def _generate_performance_charts(
                 bbox=dict(boxstyle='round,pad=0.4', facecolor='#f0f0f0', edgecolor='#888888', alpha=0.9),
             )
 
-    title = 'Model Performance & Fairness Metrics'
+    title = f'Model Performance & Fairness Metrics — {model_name} | window={forecast_window}'
     fig.suptitle(title, fontsize=14, fontweight='bold')
 
     if period_handles:
@@ -267,6 +266,8 @@ def _generate_comparative_chart(
     moving_avg_window: int = 5,
     save: bool = False,
     subfolder: str = '',
+    model_name: str = '',
+    forecast_window: int = 0,
 ) -> None:
     """Overlay moving-average lines for all baselines, one subplot per metric."""
     if 'baseline' not in assessment_results_df.columns:
@@ -373,6 +374,8 @@ def _generate_absolute_rates_chart(
     all_absolute_df: pd.DataFrame,
     save: bool = False,
     subfolder: str = '',
+    model_name: str = '',
+    forecast_window: int = 0,
 ) -> None:
     """Grid N×2: each row = one baseline, col 1 = TPR by group, col 2 = FPR by group."""
     _MA_WINDOW = 10

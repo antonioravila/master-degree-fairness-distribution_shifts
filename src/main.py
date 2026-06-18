@@ -162,18 +162,19 @@ def main():
 
     _ALL_BASELINES = ['vanilla', 'static', 'dynamic', 'abcinml']
 
-    alphas, baseline_type, sensitive_attribute, target_label, window_column, model_name, test_run, forecasting_technique, forecast_window = (
+    alphas, baseline_type, sensitive_attribute, target_label, model_name, test_run, forecasting_technique, forecast_window, batch_type = (
         general_utils.parse_arguments()
     )
 
+    window_column = general_utils.get_window_column(batch_type)
+
     df = data_utils.pre_process_df(
-        sensitive_attribute=sensitive_attribute,
-        sensitive_value=2,
-        favored_value=1,
+        sensitive_attribute,
+        window_column,
     )
     
     if test_run:
-        df = df.iloc[:500000].copy()    
+        df = df.iloc[:100000].copy()    
 
     baselines = _ALL_BASELINES if baseline_type == 'all' else [baseline_type]
 
@@ -204,10 +205,11 @@ def main():
             temporal_metrics['baseline'] = bt
             absolute_rates['baseline'] = bt
 
-            for df in (assessment_metrics, temporal_metrics, absolute_rates):
-                df['model_name'] = model_name
-                df['forecast_window'] = forecast_window
-                df['forecasting_technique'] = forecasting_technique
+            for metrics_df in (assessment_metrics, temporal_metrics, absolute_rates):
+                metrics_df['model_name'] = model_name
+                metrics_df['forecast_window'] = forecast_window
+                metrics_df['forecasting_technique'] = forecasting_technique
+                metrics_df['batch_type'] = batch_type
 
             all_assessment_df = pd.concat([all_assessment_df, assessment_metrics], ignore_index=True)
             all_temporal_df = pd.concat([all_temporal_df, temporal_metrics], ignore_index=True)
@@ -226,6 +228,7 @@ def main():
             model_name,
             forecast_window,
             forecasting_technique,
+            batch_type,
         )
 
     print('finished training.')
