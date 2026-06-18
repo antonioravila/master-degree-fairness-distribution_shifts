@@ -36,14 +36,25 @@ _VLINES = [
     (pd.Timestamp('2024-01-01'), 'jan/2024'),
 ]
 
+_BATCH_FORMAT = {
+    'monthly': '%Y-%m',
+    'weekly': '%Y-%U',
+}
+
+
+def _batch_to_datetime(labels: list, batch_type: str) -> pd.DatetimeIndex:
+    if batch_type == 'weekly':
+        return pd.to_datetime([f'{b}-0' for b in labels], format='%Y-%U-%w')
+    return pd.to_datetime([f'{b}-01' for b in labels])
+
 
 def generate_all_charts(baseline_type, baselines, alpha, sensitive_attribute, all_assessment_df, all_temporal_df, all_absolute_df, all_shap_records, model_name, forecast_window, forecasting_technique, batch_type):
     chart_label = 'all' if baseline_type == 'all' else baseline_type
     run_folder = f'{model_name}_alpha_{alpha}_{forecasting_technique}_window_{forecast_window}_{batch_type}'
     subfolder = os.path.join(sensitive_attribute, run_folder)
-    _generate_performance_charts(all_assessment_df, all_temporal_df, baseline_type=chart_label, save=True, subfolder=subfolder, model_name=model_name, forecast_window=forecast_window)
+    _generate_performance_charts(all_assessment_df, all_temporal_df, baseline_type=chart_label, save=True, subfolder=subfolder, model_name=model_name, forecast_window=forecast_window, batch_type=batch_type)
     if model_name != 'xgboost':
-        _generate_shap_charts(all_shap_records, save=True, subfolder=subfolder, model_name=model_name, forecast_window=forecast_window)
+        _generate_shap_charts(all_shap_records, save=True, subfolder=subfolder, model_name=model_name, forecast_window=forecast_window, batch_type=batch_type)
 
     # Save consolidated results
     results_dir = os.path.join('src', 'results', sensitive_attribute, run_folder)
@@ -54,8 +65,8 @@ def generate_all_charts(baseline_type, baselines, alpha, sensitive_attribute, al
 
     # Comparative charts (only when multiple baselines were run)
     if len(baselines) > 1:
-        _generate_comparative_chart(all_assessment_df, moving_avg_window=5, save=True, subfolder=subfolder, model_name=model_name, forecast_window=forecast_window)
-        _generate_absolute_rates_chart(all_absolute_df, save=True, subfolder=subfolder, model_name=model_name, forecast_window=forecast_window)
+        _generate_comparative_chart(all_assessment_df, moving_avg_window=5, save=True, subfolder=subfolder, model_name=model_name, forecast_window=forecast_window, batch_type=batch_type)
+        _generate_absolute_rates_chart(all_absolute_df, save=True, subfolder=subfolder, model_name=model_name, forecast_window=forecast_window, batch_type=batch_type)
 
 
 def _apply_bin_xticks(ax, labels: list, n_bins: int = _N_BINS) -> None:
@@ -65,9 +76,9 @@ def _apply_bin_xticks(ax, labels: list, n_bins: int = _N_BINS) -> None:
     ax.set_xticklabels([labels[p] for p in positions], rotation=45, ha='right')
 
 
-def _add_period_spans(ax, batch_labels: list) -> list:
+def _add_period_spans(ax, batch_labels: list, batch_type: str = 'monthly') -> list:
     try:
-        batch_dates = pd.to_datetime([f'{b}-01' for b in batch_labels])
+        batch_dates = _batch_to_datetime(batch_labels, batch_type)
     except Exception:
         return []
 
@@ -100,6 +111,7 @@ def _generate_performance_charts(
     subfolder: str = '',
     model_name: str = '',
     forecast_window: int = 0,
+    batch_type: str = 'monthly',
 ) -> None:
     _MA_WINDOW = 10
     N_COLS = len(_SNAPSHOT_METRICS)
@@ -130,7 +142,7 @@ def _generate_performance_charts(
         for col_idx, (col, label) in enumerate(_SNAPSHOT_METRICS):
             ax = axes[row][col_idx]
 
-            handles = _add_period_spans(ax, batch_labels)
+            handles = _add_period_spans(ax, batch_labels, batch_type)
             if not period_handles:
                 period_handles = handles
 
@@ -268,13 +280,14 @@ def _generate_comparative_chart(
     subfolder: str = '',
     model_name: str = '',
     forecast_window: int = 0,
+    batch_type: str = 'monthly',
 ) -> None:
     """Overlay moving-average lines for all baselines, one subplot per metric."""
     if 'baseline' not in assessment_results_df.columns:
         raise ValueError("assessment_results_df must have a 'baseline' column")
 
     df = assessment_results_df.copy()
-    df['batch_dt'] = pd.to_datetime([f'{b}-01' for b in df['batch'].astype(str)])
+    df['batch_dt'] = _batch_to_datetime(df['batch'].astype(str).tolist(), batch_type)
 
     # For baselines where multiple alphas exist (abcinml), average across alphas first
     df = df.groupby(['baseline', 'batch', 'batch_dt'], as_index=False)[
@@ -312,7 +325,7 @@ def _generate_comparative_chart(
     for col_idx, (col, label) in enumerate(_SNAPSHOT_METRICS):
         ax = axes[col_idx]
 
-        handles = _add_period_spans(ax, all_batch_labels)
+        handles = _add_period_spans(ax, all_batch_labels, batch_type)
         if not period_handles:
             period_handles = handles
 
@@ -327,7 +340,8 @@ def _generate_comparative_chart(
             # restrict to common dates
             ma = ma[ma.index.isin(common_dates)] if common_dates else ma
 
-            x_pos = [all_batch_labels.index(d.strftime('%Y-%m')) for d in ma.index if d.strftime('%Y-%m') in all_batch_labels]
+            fmt = _BATCH_FORMAT[batch_type]
+            x_pos = [all_batch_labels.index(d.strftime(fmt)) for d in ma.index if d.strftime(fmt) in all_batch_labels]
             line, = ax.plot(
                 x_pos, ma.values,
                 color=_BASELINE_COLORS.get(bt, None),
@@ -376,6 +390,7 @@ def _generate_absolute_rates_chart(
     subfolder: str = '',
     model_name: str = '',
     forecast_window: int = 0,
+    batch_type: str = 'monthly',
 ) -> None:
     """Grid N×2: each row = one baseline, col 1 = TPR by group, col 2 = FPR by group."""
     _MA_WINDOW = 10
@@ -383,7 +398,7 @@ def _generate_absolute_rates_chart(
     _S1_COLOR = '#1f77b4'
 
     df = all_absolute_df.copy()
-    df['batch_dt'] = pd.to_datetime([f'{b}-01' for b in df['batch'].astype(str)])
+    df['batch_dt'] = _batch_to_datetime(df['batch'].astype(str).tolist(), batch_type)
 
     rate_cols = ['tpr_S0', 'fpr_S0', 'tpr_S1', 'fpr_S1']
     df = df.groupby(['baseline', 'batch', 'batch_dt'], as_index=False)[rate_cols].mean()
@@ -419,7 +434,7 @@ def _generate_absolute_rates_chart(
         for col_idx, (col_s0, col_s1, col_label, ylim) in enumerate(_RATE_PAIRS):
             ax = axes[row][col_idx]
 
-            handles = _add_period_spans(ax, all_batch_labels)
+            handles = _add_period_spans(ax, all_batch_labels, batch_type)
             if not period_handles:
                 period_handles = handles
 
@@ -471,12 +486,12 @@ def _generate_absolute_rates_chart(
         print(f'Absolute rates chart saved to {os.path.abspath(out_path)}')
 
 
-def _generate_shap_charts(shap_records: list, save: bool = False, subfolder: str = '') -> None:
+def _generate_shap_charts(shap_records: list, save: bool = False, subfolder: str = '', model_name: str = '', forecast_window: int = 0, batch_type: str = 'monthly') -> None:
     if not shap_records:
         return
 
     feature_names = shap_records[0]['feature_names']
-    shap_records = sorted(shap_records, key=lambda r: pd.to_datetime(r['batch']))
+    shap_records = sorted(shap_records, key=lambda r: _batch_to_datetime([r['batch']], batch_type)[0])
     batches = [r['batch'] for r in shap_records]
 
     # mean |SHAP| per feature per batch → shape (n_batches, n_features)
@@ -511,7 +526,7 @@ def _generate_shap_charts(shap_records: list, save: bool = False, subfolder: str
     ax_heat.set_title('SHAP Feature Importance Over Time')
     fig.colorbar(im, ax=ax_heat, label='Mean |SHAP value|')
 
-    batch_dates = pd.to_datetime([f'{b}-01' for b in batches])
+    batch_dates = _batch_to_datetime(batches, batch_type)
     for vline_dt, vline_label in _VLINES:
         idxs = [i for i, d in enumerate(batch_dates) if d >= vline_dt]
         if idxs:
