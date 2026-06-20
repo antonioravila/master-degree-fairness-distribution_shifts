@@ -119,7 +119,6 @@ def pre_process_df(
 
     print('\t importing data...')
     df = _import_data()
-    df = df[pd.to_datetime(df['DT_NOTIFIC'], errors='coerce').dt.year != 2018]
 
     print('\t filling NAs...')
     df = _fill_na(df)
@@ -136,6 +135,16 @@ def pre_process_df(
     else:
         # IDADE_BIN is not the sensitive attribute; drop it so it's never a predictor
         df = df.drop(columns=['IDADE_BIN'])
+
+    if window_column == 'YEAR-WEEK':
+        df = df[df[window_column].between('2019-01', '2026-01')]
+    elif window_column == 'YEAR-MONTH':
+        df = df[
+            df[window_column].between(
+                pd.Period('2019-01', freq='M'), 
+                pd.Period('2026-01', freq='M')
+            )
+        ]
 
     print('\t finished data pre-process')
 

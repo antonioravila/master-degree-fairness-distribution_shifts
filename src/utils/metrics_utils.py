@@ -65,7 +65,7 @@ def generate_all_charts(baseline_type, baselines, alpha, sensitive_attribute, al
 
     # Comparative charts (only when multiple baselines were run)
     if len(baselines) > 1:
-        _generate_comparative_chart(all_assessment_df, moving_avg_window=5, save=True, subfolder=subfolder, model_name=model_name, forecast_window=forecast_window, batch_type=batch_type)
+        _generate_comparative_chart(all_assessment_df, moving_avg_window=20 if batch_type == 'weekly' else 5, save=True, subfolder=subfolder, model_name=model_name, forecast_window=forecast_window, batch_type=batch_type)
         _generate_absolute_rates_chart(all_absolute_df, save=True, subfolder=subfolder, model_name=model_name, forecast_window=forecast_window, batch_type=batch_type)
 
 
@@ -113,7 +113,7 @@ def _generate_performance_charts(
     forecast_window: int = 0,
     batch_type: str = 'monthly',
 ) -> None:
-    _MA_WINDOW = 10
+    _MA_WINDOW = 20 if batch_type == 'weekly' else 10
     N_COLS = len(_SNAPSHOT_METRICS)
 
     has_baselines = 'baseline' in assessment_results_df.columns
@@ -393,7 +393,7 @@ def _generate_absolute_rates_chart(
     batch_type: str = 'monthly',
 ) -> None:
     """Grid N×2: each row = one baseline, col 1 = TPR by group, col 2 = FPR by group."""
-    _MA_WINDOW = 10
+    _MA_WINDOW = 20 if batch_type == 'weekly' else 10
     _S0_COLOR = '#ff7f0e'
     _S1_COLOR = '#1f77b4'
 
