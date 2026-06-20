@@ -51,11 +51,16 @@ def _fill_na(df):
     return df
     
 
-def _convert_types(df):
+def _convert_types(df: pd.DataFrame, window_column: str):
     # DT_NOTIFIC: extract year, drop original
     df['DT_NOTIFIC'] = pd.to_datetime(df['DT_NOTIFIC'], errors='coerce')
-    df['YEAR-MONTH'] = df['DT_NOTIFIC'].dt.to_period('M')    
-    df.drop(columns=['DT_NOTIFIC'], inplace=True)
+    if window_column == 'YEAR-MONTH':
+        df[window_column] = df['DT_NOTIFIC'].dt.to_period('M')    
+        df.drop(columns=['DT_NOTIFIC'], inplace=True)
+    elif window_column == 'YEAR-WEEK':
+        df[window_column] = df['DT_NOTIFIC'].dt.strftime("%Y-%U")    
+        df.drop(columns=['DT_NOTIFIC'], inplace=True)
+
 
     # NU_IDADE_N: numeric, fill NaN with 0
     df['NU_IDADE_N'] = pd.to_numeric(df['NU_IDADE_N'], errors='coerce')
@@ -107,18 +112,21 @@ def _convert_types(df):
 
 def pre_process_df(
     sensitive_attribute: str,
-    sensitive_value: str | int,
-    favored_value: str | int,
+    window_column: str,
 ) -> pd.DataFrame:
 
     print('0) starting data pre-process')
 
+    print('\t importing data...')
     df = _import_data()
+
+    print('\t filling NAs...')
     df = _fill_na(df)
-    df = _convert_types(df)
     
-    df = df[df['YEAR-MONTH'].dt.year != 2018]
-    df.sort_values(by='YEAR-MONTH', ascending=True, inplace=True)
+    print('\t converting types...')
+    df = _convert_types(df, window_column)
+    
+    df.sort_values(by=window_column, ascending=True, inplace=True)
 
     # Drop correlated column to prevent leakage or redundancy
     if sensitive_attribute == 'IDADE_BIN':
@@ -127,5 +135,17 @@ def pre_process_df(
     else:
         # IDADE_BIN is not the sensitive attribute; drop it so it's never a predictor
         df = df.drop(columns=['IDADE_BIN'])
+
+    if window_column == 'YEAR-WEEK':
+        df = df[df[window_column].between('2019-01', '2026-01')]
+    elif window_column == 'YEAR-MONTH':
+        df = df[
+            df[window_column].between(
+                pd.Period('2019-01', freq='M'), 
+                pd.Period('2026-01', freq='M')
+            )
+        ]
+
+    print('\t finished data pre-process')
 
     return df

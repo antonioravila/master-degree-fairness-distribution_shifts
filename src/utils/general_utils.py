@@ -8,11 +8,11 @@ def parse_arguments():
     parser.add_argument('--baseline_type', type=str, default='abcinml')
     parser.add_argument('--sensitive_attribute', type=str)
     parser.add_argument('--target_label', type=str)
-    parser.add_argument('--window_column', type=str)
     parser.add_argument('--model_name', type=str)
     parser.add_argument('--test_run', type=str, default='False')
     parser.add_argument('--forecasting_technique', type=str, default='sma')
-    parser.add_argument('--forecast_window', type=str, default=5)
+    parser.add_argument('--forecast_window', type=int, default=5)
+    parser.add_argument('--batch_type', type=str, default='monthly')
 
     args = parser.parse_args()
 
@@ -20,18 +20,28 @@ def parse_arguments():
     baseline_type = args.baseline_type
     sensitive_attribute = args.sensitive_attribute
     target_label = args.target_label
-    window_column = args.window_column
     model_name = args.model_name
     test_run = eval(args.test_run)
     forecasting_technique = args.forecasting_technique
     forecast_window = args.forecast_window
+    batch_type = args.batch_type
 
     if alpha == None:
         alphas = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]
     else:
         alphas = [alpha]
 
-    return alphas, baseline_type, sensitive_attribute, target_label, window_column, model_name, test_run, forecasting_technique, forecast_window
+    return alphas, baseline_type, sensitive_attribute, target_label, model_name, test_run, forecasting_technique, forecast_window, batch_type
+
+
+def get_window_column(batch_type):
+    window_col_map = {
+        'monthly': 'YEAR-MONTH',
+        'weekly': 'YEAR-WEEK' ,
+    }
+
+    window_column = window_col_map.get(batch_type)
+    return window_column
 
 
 def initialize_variables(df, window_column):
