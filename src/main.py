@@ -82,12 +82,25 @@ def run_baseline(
 
             if X_train is not None:
                 if baseline_type == 'abcinml':
-                    forecasted_distributions = model_utils.forecast_joint_distributions(
-                        historical_proportions,
-                        window=forecast_window,
-                        forecasting_technique=forecasting_technique,
-                        alpha_ema=alpha_ema
-                    )
+                    if forecasting_technique == 'oracle':
+                        forecasted_distributions = model_utils.forecast_joint_distributions_oracle(
+                            df=df,
+                            batches=batches,
+                            i=i,
+                            window_column=window_column,
+                            sensitive_attribute=sensitive_attribute,
+                            target_label=target_label,
+                            historical_proportions=historical_proportions,
+                            window=forecast_window,
+                            alpha_ema=alpha_ema,
+                        )
+                    else:
+                        forecasted_distributions = model_utils.forecast_joint_distributions(
+                            historical_proportions,
+                            window=forecast_window,
+                            forecasting_technique=forecasting_technique,
+                            alpha_ema=alpha_ema,
+                        )
                     if forecasted_distributions is None:
                         for key in historical_proportions:
                             historical_proportions[key].append(current_proportions[key])

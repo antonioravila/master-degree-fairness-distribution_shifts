@@ -10,7 +10,7 @@ def parse_arguments():
     parser.add_argument('--target_label', type=str)
     parser.add_argument('--model_name', type=str)
     parser.add_argument('--test_run', type=str, default='False')
-    parser.add_argument('--forecasting_technique', type=str, default='sma')
+    parser.add_argument('--forecasting_technique', type=str, default='sma', choices=['sma', 'ema', 'oracle'])
     parser.add_argument('--forecast_window', type=int, default=5)
     parser.add_argument('--batch_type', type=str, default='monthly')
 
