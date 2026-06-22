@@ -11,9 +11,11 @@ Usage:
 """
 
 import argparse
+import re
 import sys
 from pathlib import Path
 
+import matplotlib.pyplot as plt
 import pandas as pd
 
 _SRC = Path(__file__).parent.parent
@@ -24,6 +26,14 @@ from utils import metrics_utils
 _CSV_ASSESSMENT = 'assessment_all_baselines.csv'
 _CSV_TEMPORAL = 'temporal_results_df.csv'
 _CSV_ABSOLUTE = 'absolute_results_df.csv'
+
+# Matches the optional _ema_{alpha_ema} suffix that appears after the batch_type token
+_EMA_SUFFIX_RE = re.compile(r'(?:monthly|weekly)_ema_([\d.]+)$')
+
+
+def _parse_alpha_ema(folder_name: str) -> float | None:
+    m = _EMA_SUFFIX_RE.search(folder_name)
+    return float(m.group(1)) if m else None
 
 
 def _regenerate_one(run_dir: Path, sensitive_attribute: str) -> None:
@@ -53,9 +63,10 @@ def _regenerate_one(run_dir: Path, sensitive_attribute: str) -> None:
 
     baselines = all_assessment_df['baseline'].unique().tolist()
     baseline_type = 'all' if len(baselines) > 1 else baselines[0]
+    alpha_ema = _parse_alpha_ema(run_dir.name)
 
     print(f'Regenerating: {run_dir.name}')
-    print(f'  model={model_name}  alpha={alpha}  baselines={baselines}  batch_type={batch_type}')
+    print(f'  model={model_name}  alpha={alpha}  baselines={baselines}  batch_type={batch_type}  alpha_ema={alpha_ema}')
 
     metrics_utils.generate_all_charts(
         baseline_type,
@@ -70,7 +81,9 @@ def _regenerate_one(run_dir: Path, sensitive_attribute: str) -> None:
         forecast_window,
         forecasting_technique,
         batch_type,
+        alpha_ema,
     )
+    plt.close('all')
 
 
 def main() -> None:
