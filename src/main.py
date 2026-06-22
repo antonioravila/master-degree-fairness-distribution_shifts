@@ -14,6 +14,7 @@ def run_baseline(
     forecast_window: int,
     model_name: str,
     forecasting_technique: str,
+    alpha_ema: float,
 ) -> None:
 
     _MAX_ITER = 1000
@@ -85,6 +86,7 @@ def run_baseline(
                         historical_proportions,
                         window=forecast_window,
                         forecasting_technique=forecasting_technique,
+                        alpha_ema=alpha_ema
                     )
                     if forecasted_distributions is None:
                         for key in historical_proportions:
@@ -162,7 +164,7 @@ def main():
 
     _ALL_BASELINES = ['vanilla', 'static', 'dynamic', 'abcinml']
 
-    alphas, baseline_type, sensitive_attribute, target_label, model_name, test_run, forecasting_technique, forecast_window, batch_type = (
+    alphas, baseline_type, sensitive_attribute, target_label, model_name, test_run, forecasting_technique, forecast_window, batch_type, alpha_ema = (
         general_utils.parse_arguments()
     )
 
@@ -198,6 +200,7 @@ def main():
                     forecast_window=forecast_window,
                     model_name=model_name,
                     forecasting_technique=forecasting_technique,
+                    alpha_ema=alpha_ema,
                 )
             )
 
@@ -210,25 +213,24 @@ def main():
                 metrics_df['forecast_window'] = forecast_window
                 metrics_df['forecasting_technique'] = forecasting_technique
                 metrics_df['batch_type'] = batch_type
+                metrics_df['alpha_ema'] = alpha_ema
 
             all_assessment_df = pd.concat([all_assessment_df, assessment_metrics], ignore_index=True)
             all_temporal_df = pd.concat([all_temporal_df, temporal_metrics], ignore_index=True)
             all_absolute_df = pd.concat([all_absolute_df, absolute_rates], ignore_index=True)
             all_shap_records.extend(alpha_shap_records)
 
-        metrics_utils.generate_all_charts(
-            baseline_type,
-            baselines,
-            alpha,
+        metrics_utils.save_results(
             sensitive_attribute,
             all_assessment_df,
             all_temporal_df,
             all_absolute_df,
-            all_shap_records,
             model_name,
+            alpha,
             forecast_window,
             forecasting_technique,
             batch_type,
+            alpha_ema,
         )
 
     print('finished training.')

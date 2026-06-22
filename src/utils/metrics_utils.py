@@ -48,22 +48,29 @@ def _batch_to_datetime(labels: list, batch_type: str) -> pd.DatetimeIndex:
     return pd.to_datetime([f'{b}-01' for b in labels])
 
 
-def generate_all_charts(baseline_type, baselines, alpha, sensitive_attribute, all_assessment_df, all_temporal_df, all_absolute_df, all_shap_records, model_name, forecast_window, forecasting_technique, batch_type):
-    chart_label = 'all' if baseline_type == 'all' else baseline_type
-    run_folder = f'{model_name}_alpha_{alpha}_{forecasting_technique}_window_{forecast_window}_{batch_type}'
-    subfolder = os.path.join(sensitive_attribute, run_folder)
-    _generate_performance_charts(all_assessment_df, all_temporal_df, baseline_type=chart_label, save=True, subfolder=subfolder, model_name=model_name, forecast_window=forecast_window, batch_type=batch_type)
-    if model_name != 'xgboost':
-        _generate_shap_charts(all_shap_records, save=True, subfolder=subfolder, model_name=model_name, forecast_window=forecast_window, batch_type=batch_type)
+def _run_folder_name(model_name, alpha, forecasting_technique, forecast_window, batch_type, alpha_ema):
+    ema_suffix = f'_ema_{alpha_ema}' if forecasting_technique == 'ema' else ''
+    return f'{model_name}_alpha_{alpha}_{forecasting_technique}_window_{forecast_window}_{batch_type}{ema_suffix}'
 
-    # Save consolidated results
+
+def save_results(sensitive_attribute, all_assessment_df, all_temporal_df, all_absolute_df, model_name, alpha, forecast_window, forecasting_technique, batch_type, alpha_ema):
+    run_folder = _run_folder_name(model_name, alpha, forecasting_technique, forecast_window, batch_type, alpha_ema)
     results_dir = os.path.join('src', 'results', sensitive_attribute, run_folder)
     os.makedirs(results_dir, exist_ok=True)
     all_assessment_df.to_csv(os.path.join(results_dir, 'assessment_all_baselines.csv'), index=False)
     all_temporal_df.to_csv(os.path.join(results_dir, 'temporal_results_df.csv'), index=False)
     all_absolute_df.to_csv(os.path.join(results_dir, 'absolute_results_df.csv'), index=False)
+    print(f'Results saved to {os.path.abspath(results_dir)}')
 
-    # Comparative charts (only when multiple baselines were run)
+
+def generate_all_charts(baseline_type, baselines, alpha, sensitive_attribute, all_assessment_df, all_temporal_df, all_absolute_df, all_shap_records, model_name, forecast_window, forecasting_technique, batch_type, alpha_ema):
+    chart_label = 'all' if baseline_type == 'all' else baseline_type
+    run_folder = _run_folder_name(model_name, alpha, forecasting_technique, forecast_window, batch_type, alpha_ema)
+    subfolder = os.path.join(sensitive_attribute, run_folder)
+    _generate_performance_charts(all_assessment_df, all_temporal_df, baseline_type=chart_label, save=True, subfolder=subfolder, model_name=model_name, forecast_window=forecast_window, batch_type=batch_type)
+    if model_name != 'xgboost':
+        _generate_shap_charts(all_shap_records, save=True, subfolder=subfolder, model_name=model_name, forecast_window=forecast_window, batch_type=batch_type)
+
     if len(baselines) > 1:
         _generate_comparative_chart(all_assessment_df, moving_avg_window=20 if batch_type == 'weekly' else 5, save=True, subfolder=subfolder, model_name=model_name, forecast_window=forecast_window, batch_type=batch_type)
         _generate_absolute_rates_chart(all_absolute_df, save=True, subfolder=subfolder, model_name=model_name, forecast_window=forecast_window, batch_type=batch_type)

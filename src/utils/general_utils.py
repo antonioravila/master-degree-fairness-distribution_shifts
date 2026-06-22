@@ -14,6 +14,8 @@ def parse_arguments():
     parser.add_argument('--forecast_window', type=int, default=5)
     parser.add_argument('--batch_type', type=str, default='monthly')
 
+    parser.add_argument('--alpha_ema', type=float, default=0.5)
+
     args = parser.parse_args()
 
     alpha = args.alpha
@@ -25,13 +27,14 @@ def parse_arguments():
     forecasting_technique = args.forecasting_technique
     forecast_window = args.forecast_window
     batch_type = args.batch_type
+    alpha_ema = args.alpha_ema
 
     if alpha == None:
         alphas = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]
     else:
         alphas = [alpha]
 
-    return alphas, baseline_type, sensitive_attribute, target_label, model_name, test_run, forecasting_technique, forecast_window, batch_type
+    return alphas, baseline_type, sensitive_attribute, target_label, model_name, test_run, forecasting_technique, forecast_window, batch_type, alpha_ema
 
 
 def get_window_column(batch_type):
@@ -44,7 +47,7 @@ def get_window_column(batch_type):
     return window_column
 
 
-def initialize_variables(df, window_column):
+def initialize_variables(df, window_column, alpha_ema=0.5):
     batches = sorted(df[window_column].unique())
 
     historical_proportions = {
