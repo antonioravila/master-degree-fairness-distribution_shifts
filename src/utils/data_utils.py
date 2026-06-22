@@ -137,12 +137,12 @@ def pre_process_df(
         df = df.drop(columns=['IDADE_BIN'])
 
     if window_column == 'YEAR-WEEK':
-        df = df[df[window_column].between('2019-01', '2026-01')]
+        df = df[df[window_column].between('2019-01', '2026-12')]
     elif window_column == 'YEAR-MONTH':
         df = df[
             df[window_column].between(
                 pd.Period('2019-01', freq='M'), 
-                pd.Period('2026-01', freq='M')
+                pd.Period('2026-03', freq='M')
             )
         ]
 
