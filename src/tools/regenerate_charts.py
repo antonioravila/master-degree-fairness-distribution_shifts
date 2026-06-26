@@ -4,13 +4,14 @@ SHAP charts are skipped — SHAP values are not persisted to disk.
 
 Usage:
     # single run folder
-    uv run python src/tools/regenerate_charts.py --results_dir src/results/CS_RACA/logistic_regression_alpha_0.5_sma_window_5_monthly
+    uv run python src/tools/regenerate_charts.py --results_dir src/results/IDADE_BIN/logistic_regression_alpha_0.5_sma_window_5_monthly
 
     # all run folders under a sensitive-attribute directory
-    uv run python src/tools/regenerate_charts.py --results_dir src/results/CS_RACA
+    uv run python src/tools/regenerate_charts.py --results_dir src/results/IDADE_BIN
 """
 
 import argparse
+import os
 import re
 import sys
 from pathlib import Path
@@ -34,6 +35,19 @@ _EMA_SUFFIX_RE = re.compile(r'(?:monthly|weekly)_ema_([\d.]+)$')
 def _parse_alpha_ema(folder_name: str) -> float | None:
     m = _EMA_SUFFIX_RE.search(folder_name)
     return float(m.group(1)) if m else None
+
+
+def _load_non_abc(run_dir: Path, model_name: str, batch_type: str) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    non_abc_folder = metrics_utils.baseline_non_abc_folder_name(model_name, batch_type)
+    non_abc_dir = run_dir.parent / non_abc_folder
+    if not (non_abc_dir / _CSV_ASSESSMENT).exists():
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+    print(f'  merging non-ABC results from {non_abc_dir.name}')
+    return (
+        pd.read_csv(non_abc_dir / _CSV_ASSESSMENT),
+        pd.read_csv(non_abc_dir / _CSV_TEMPORAL),
+        pd.read_csv(non_abc_dir / _CSV_ABSOLUTE),
+    )
 
 
 def _regenerate_one(run_dir: Path, sensitive_attribute: str) -> None:
@@ -60,10 +74,21 @@ def _regenerate_one(run_dir: Path, sensitive_attribute: str) -> None:
     forecasting_technique = str(row['forecasting_technique'])
     batch_type = str(row.get('batch_type', 'monthly'))
     alpha = float(all_assessment_df['alpha'].iloc[0])
+    alpha_ema = _parse_alpha_ema(run_dir.name)
+
+    is_non_abc = run_dir.name.startswith('baseline_non_abc')
+    subfolder_override = os.path.join(sensitive_attribute, run_dir.name) if is_non_abc else None
+
+    # For per-alpha (abcinml) folders, merge non-abc results so comparative charts include all baselines
+    if not is_non_abc:
+        non_abc_assessment, non_abc_temporal, non_abc_absolute = _load_non_abc(run_dir, model_name, batch_type)
+        if not non_abc_assessment.empty:
+            all_assessment_df = pd.concat([non_abc_assessment, all_assessment_df], ignore_index=True)
+            all_temporal_df = pd.concat([non_abc_temporal, all_temporal_df], ignore_index=True)
+            all_absolute_df = pd.concat([non_abc_absolute, all_absolute_df], ignore_index=True)
 
     baselines = all_assessment_df['baseline'].unique().tolist()
     baseline_type = 'all' if len(baselines) > 1 else baselines[0]
-    alpha_ema = _parse_alpha_ema(run_dir.name)
 
     print(f'Regenerating: {run_dir.name}')
     print(f'  model={model_name}  alpha={alpha}  baselines={baselines}  batch_type={batch_type}  alpha_ema={alpha_ema}')
@@ -82,6 +107,7 @@ def _regenerate_one(run_dir: Path, sensitive_attribute: str) -> None:
         forecasting_technique,
         batch_type,
         alpha_ema,
+        subfolder_override=subfolder_override,
     )
     plt.close('all')
 
