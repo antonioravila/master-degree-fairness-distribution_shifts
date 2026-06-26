@@ -1,3 +1,4 @@
+import os
 import pandas as pd
 import warnings
 from sklearn.exceptions import ConvergenceWarning
@@ -172,10 +173,20 @@ def run_baseline(
     return assessment_metrics, temporal_metrics, shap_records, absolute_rates
 
 
+def _attach_metadata(dfs, model_name, forecast_window, forecasting_technique, batch_type, alpha_ema):
+    for df in dfs:
+        df['model_name'] = model_name
+        df['forecast_window'] = forecast_window
+        df['forecasting_technique'] = forecasting_technique
+        df['batch_type'] = batch_type
+        df['alpha_ema'] = alpha_ema
+
+
 def main():
     warnings.filterwarnings('ignore', category=ConvergenceWarning)
 
     _ALL_BASELINES = ['vanilla', 'static', 'dynamic', 'abcinml']
+    _NON_ABC_BASELINES = ['vanilla', 'static', 'dynamic']
 
     alphas, baseline_type, sensitive_attribute, target_label, model_name, test_run, forecasting_technique, forecast_window, batch_type, alpha_ema = (
         general_utils.parse_arguments()
@@ -187,64 +198,135 @@ def main():
         sensitive_attribute,
         window_column,
     )
-    
+
     if test_run:
-        df = df.iloc[:100000].copy()    
+        df = df.iloc[:100000].copy()
 
     baselines = _ALL_BASELINES if baseline_type == 'all' else [baseline_type]
+    non_abc_to_run = [b for b in baselines if b in _NON_ABC_BASELINES]
+    run_abcinml = 'abcinml' in baselines
 
-    for alpha in alphas:
-        all_assessment_df = pd.DataFrame()
-        all_temporal_df = pd.DataFrame()
-        all_absolute_df = pd.DataFrame()
-        all_shap_records = []
+    # --- Run vanilla/static/dynamic once — results are alpha-independent ---
+    non_abc_assessment_df = pd.DataFrame()
+    non_abc_temporal_df = pd.DataFrame()
+    non_abc_absolute_df = pd.DataFrame()
+    non_abc_shap_records = []
 
-        for bt in baselines:
-            print(f'--- Running baseline: {bt}, alpha: {alpha} ---\n')
+    if non_abc_to_run:
+        non_abc_folder = metrics_utils.baseline_non_abc_folder_name(model_name, batch_type)
+        non_abc_results_dir = os.path.join('src', 'results', sensitive_attribute, non_abc_folder)
+        non_abc_assessment_path = os.path.join(non_abc_results_dir, 'assessment_all_baselines.csv')
+        non_abc_subfolder = os.path.join(sensitive_attribute, non_abc_folder)
 
-            assessment_metrics, temporal_metrics, alpha_shap_records, absolute_rates = (
-                run_baseline(
+        if os.path.exists(non_abc_assessment_path):
+            print(f'--- Loading cached non-ABC results from {non_abc_results_dir} ---\n')
+            non_abc_assessment_df = pd.read_csv(non_abc_assessment_path)
+            non_abc_temporal_df = pd.read_csv(os.path.join(non_abc_results_dir, 'temporal_results_df.csv'))
+            non_abc_absolute_df = pd.read_csv(os.path.join(non_abc_results_dir, 'absolute_results_df.csv'))
+        else:
+            for bt in non_abc_to_run:
+                print(f'--- Running baseline: {bt} (alpha-independent) ---\n')
+
+                assessment_metrics, temporal_metrics, shap_records_bt, absolute_rates = run_baseline(
                     df=df,
                     window_column=window_column,
                     sensitive_attribute=sensitive_attribute,
                     target_label=target_label,
                     baseline_type=bt,
-                    alpha=alpha,
+                    alpha=0,
                     forecast_window=forecast_window,
                     model_name=model_name,
                     forecasting_technique=forecasting_technique,
                     alpha_ema=alpha_ema,
                 )
+                assessment_metrics['baseline'] = bt
+                temporal_metrics['baseline'] = bt
+                absolute_rates['baseline'] = bt
+                _attach_metadata(
+                    (assessment_metrics, temporal_metrics, absolute_rates),
+                    model_name, forecast_window, forecasting_technique, batch_type, alpha_ema,
+                )
+
+                non_abc_assessment_df = pd.concat([non_abc_assessment_df, assessment_metrics], ignore_index=True)
+                non_abc_temporal_df = pd.concat([non_abc_temporal_df, temporal_metrics], ignore_index=True)
+                non_abc_absolute_df = pd.concat([non_abc_absolute_df, absolute_rates], ignore_index=True)
+                non_abc_shap_records.extend(shap_records_bt)
+
+            metrics_utils.save_baseline_non_abc_results(
+                sensitive_attribute, non_abc_assessment_df, non_abc_temporal_df, non_abc_absolute_df,
+                model_name, batch_type,
+            )
+            metrics_utils.generate_all_charts(
+                baseline_type='all' if len(non_abc_to_run) > 1 else non_abc_to_run[0],
+                baselines=non_abc_to_run,
+                alpha=0,
+                sensitive_attribute=sensitive_attribute,
+                all_assessment_df=non_abc_assessment_df,
+                all_temporal_df=non_abc_temporal_df,
+                all_absolute_df=non_abc_absolute_df,
+                all_shap_records=non_abc_shap_records,
+                model_name=model_name,
+                forecast_window=forecast_window,
+                forecasting_technique=forecasting_technique,
+                batch_type=batch_type,
+                alpha_ema=alpha_ema,
+                subfolder_override=non_abc_subfolder,
             )
 
-            assessment_metrics['baseline'] = bt
-            temporal_metrics['baseline'] = bt
-            absolute_rates['baseline'] = bt
+    # --- Run abcinml once per alpha ---
+    if run_abcinml:
+        for alpha in alphas:
+            print(f'--- Running baseline: abcinml, alpha: {alpha} ---\n')
 
-            for metrics_df in (assessment_metrics, temporal_metrics, absolute_rates):
-                metrics_df['model_name'] = model_name
-                metrics_df['forecast_window'] = forecast_window
-                metrics_df['forecasting_technique'] = forecasting_technique
-                metrics_df['batch_type'] = batch_type
-                metrics_df['alpha_ema'] = alpha_ema
+            assessment_metrics, temporal_metrics, shap_records_alpha, absolute_rates = run_baseline(
+                df=df,
+                window_column=window_column,
+                sensitive_attribute=sensitive_attribute,
+                target_label=target_label,
+                baseline_type='abcinml',
+                alpha=alpha,
+                forecast_window=forecast_window,
+                model_name=model_name,
+                forecasting_technique=forecasting_technique,
+                alpha_ema=alpha_ema,
+            )
+            assessment_metrics['baseline'] = 'abcinml'
+            temporal_metrics['baseline'] = 'abcinml'
+            absolute_rates['baseline'] = 'abcinml'
+            _attach_metadata(
+                (assessment_metrics, temporal_metrics, absolute_rates),
+                model_name, forecast_window, forecasting_technique, batch_type, alpha_ema,
+            )
 
-            all_assessment_df = pd.concat([all_assessment_df, assessment_metrics], ignore_index=True)
-            all_temporal_df = pd.concat([all_temporal_df, temporal_metrics], ignore_index=True)
-            all_absolute_df = pd.concat([all_absolute_df, absolute_rates], ignore_index=True)
-            all_shap_records.extend(alpha_shap_records)
+            metrics_utils.save_results(
+                sensitive_attribute,
+                assessment_metrics,
+                temporal_metrics,
+                absolute_rates,
+                model_name, alpha, forecast_window, forecasting_technique, batch_type, alpha_ema,
+            )
 
-        metrics_utils.save_results(
-            sensitive_attribute,
-            all_assessment_df,
-            all_temporal_df,
-            all_absolute_df,
-            model_name,
-            alpha,
-            forecast_window,
-            forecasting_technique,
-            batch_type,
-            alpha_ema,
-        )
+            # Combine with non-abc results so comparative charts include all baselines
+            combined_assessment = pd.concat([non_abc_assessment_df, assessment_metrics], ignore_index=True)
+            combined_temporal = pd.concat([non_abc_temporal_df, temporal_metrics], ignore_index=True)
+            combined_absolute = pd.concat([non_abc_absolute_df, absolute_rates], ignore_index=True)
+            combined_shap = non_abc_shap_records + shap_records_alpha
+
+            metrics_utils.generate_all_charts(
+                baseline_type=baseline_type,
+                baselines=non_abc_to_run + ['abcinml'],
+                alpha=alpha,
+                sensitive_attribute=sensitive_attribute,
+                all_assessment_df=combined_assessment,
+                all_temporal_df=combined_temporal,
+                all_absolute_df=combined_absolute,
+                all_shap_records=combined_shap,
+                model_name=model_name,
+                forecast_window=forecast_window,
+                forecasting_technique=forecasting_technique,
+                batch_type=batch_type,
+                alpha_ema=alpha_ema,
+            )
 
     print('finished training.')
 

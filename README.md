@@ -49,10 +49,19 @@ src/
 │   ├── model_utils.py        # Model initialization, reweighing, forecasting
 │   ├── metrics_utils.py      # Snapshot/temporal metrics, all chart generation
 │   └── general_utils.py      # Argument parsing, variable initialization
+├── tools/
+│   ├── regenerate_charts.py  # Rebuild figures from saved CSVs (no re-training)
+│   ├── concatenate_results.py
+│   ├── alpha_analysis.py
+│   └── analyze_forecast_quality.py
 ├── figures/                  # Generated charts (gitignored)
-│   └── {sensitive_attribute}/{model}_alpha_{alpha}_{technique}_window_{window}/
+│   └── {sensitive_attribute}/
+│       ├── baseline_non_abc_{model}_{batch_type}/   # vanilla, static, dynamic
+│       └── {model}_alpha_{alpha}_{technique}_window_{window}_{batch_type}/  # abcinml + comparative
 └── results/                  # Generated CSVs (gitignored)
-    └── {sensitive_attribute}/{model}_alpha_{alpha}_{technique}_window_{window}/
+    └── {sensitive_attribute}/
+        ├── baseline_non_abc_{model}_{batch_type}/   # vanilla, static, dynamic (run once)
+        └── {model}_alpha_{alpha}_{technique}_window_{window}_{batch_type}/  # abcinml only
 ```
 
 ### Data flow
@@ -63,6 +72,16 @@ data_utils.pre_process_df()
     └── _fill_na()           → Drop rows with missing target/sensitive; fill NAs
     └── _convert_types()     → Encode binary/categorical features; create IDADE_BIN
     └── (post-processing)    → Drop 2018 rows, sort by YEAR-MONTH, drop leakage cols
+
+main()                       → Run vanilla/static/dynamic once (alpha-independent):
+    └── run_baseline() × {vanilla, static, dynamic}
+        └── save to baseline_non_abc_{model}_{batch_type}/
+        └── generate charts to baseline_non_abc_{model}_{batch_type}/
+
+                             → For each alpha, run abcinml:
+    └── run_baseline(abcinml, alpha=α)
+        └── save abcinml results to {run_folder}/
+        └── combine with non-abc data → generate all charts (incl. comparative) to {run_folder}/
 
 main.run_baseline()          → For each batch (month):
     ├── compute_batch_proportions()    → Joint (S, Y) distribution of current batch
@@ -261,19 +280,30 @@ Computed by `metrics_utils.compute_temporal_metrics`:
 
 ## Outputs
 
-All outputs are placed under `src/figures/` (charts) and `src/results/` (CSVs), organized by:
+Outputs are split into two folder types:
+
+**Non-ABC baselines** (`vanilla`, `static`, `dynamic`) — run once, alpha-independent:
 ```
-{sensitive_attribute}/{model_name}_alpha_{alpha}_{forecasting_technique}_window_{forecast_window}/
+src/results/{sensitive_attribute}/baseline_non_abc_{model_name}_{batch_type}/
+src/figures/{sensitive_attribute}/baseline_non_abc_{model_name}_{batch_type}/
 ```
+
+**ABCINML** — one folder per alpha value:
+```
+src/results/{sensitive_attribute}/{model_name}_alpha_{alpha}_{technique}_window_{window}_{batch_type}/
+src/figures/{sensitive_attribute}/{model_name}_alpha_{alpha}_{technique}_window_{window}_{batch_type}/
+```
+
+The per-alpha CSV files contain **only ABCINML data**. The per-alpha chart folder contains all charts including comparative ones (which overlay all four baselines by merging non-abc data at chart-generation time).
 
 ### Charts
 
-| File | Description | When generated |
+| File | Description | Location |
 |---|---|---|
-| `model_performance_metrics.png` | Grid: one row per baseline, one column per metric. Raw values + 10-batch moving average. Period spans overlaid. | Always |
-| `model_performance_comparison.png` | Overlay of all baselines per metric, moving average only, common date range. | `--baseline_type all` only |
-| `absolute_rates_by_group.png` | TPR and FPR per sensitive group (S0/S1) over time, one row per baseline. | `--baseline_type all` only |
-| `shap_summary.png` | Global feature importance bar + temporal SHAP heatmap. | Always (logistic regression only) |
+| `model_performance_metrics.png` | Grid: one row per baseline, one column per metric. Raw values + moving average. Period spans overlaid. | Both folders |
+| `model_performance_comparison.png` | Overlay of all baselines per metric, moving average only, common date range. | Per-alpha folder (`--baseline_type all`) |
+| `absolute_rates_by_group.png` | TPR and FPR per sensitive group (S0/S1) over time, one row per baseline. | Per-alpha folder (`--baseline_type all`) |
+| `shap_summary.png` | Global feature importance bar + temporal SHAP heatmap. | Both folders (logistic regression only) |
 
 Charts annotate five historical periods with colored spans:
 
@@ -289,9 +319,19 @@ Charts annotate five historical periods with colored spans:
 
 | File | Contents |
 |---|---|
-| `assessment_all_baselines.csv` | Per-batch snapshot metrics for all baselines and alphas |
+| `assessment_all_baselines.csv` | Per-batch snapshot metrics (all baselines in non-abc folder; abcinml only in per-alpha folder) |
 | `temporal_results_df.csv` | Temporal summary metrics per baseline |
 | `absolute_results_df.csv` | Per-batch absolute TPR/FPR rates per group |
+
+### Regenerating charts without re-training
+
+```bash
+# Regenerate charts for a single run folder
+uv run python src/tools/regenerate_charts.py --results_dir src/results/CS_RACA/logistic_regression_alpha_0.5_sma_window_5_monthly
+
+# Regenerate all run folders under a sensitive-attribute directory (including baseline_non_abc)
+uv run python src/tools/regenerate_charts.py --results_dir src/results/CS_RACA
+```
 
 ---
 
@@ -364,7 +404,18 @@ uv run ruff format src/
     ├── data/
     │   └── SRAG/raw/        # Raw parquet files (not committed)
     ├── figures/             # Generated charts (gitignored)
+    │   └── {sensitive_attribute}/
+    │       ├── baseline_non_abc_{model}_{batch_type}/
+    │       └── {model}_alpha_{alpha}_{technique}_window_{window}_{batch_type}/
     ├── results/             # Generated CSVs (gitignored)
+    │   └── {sensitive_attribute}/
+    │       ├── baseline_non_abc_{model}_{batch_type}/
+    │       └── {model}_alpha_{alpha}_{technique}_window_{window}_{batch_type}/
+    ├── tools/
+    │   ├── regenerate_charts.py    # Rebuild figures from CSVs without re-training
+    │   ├── concatenate_results.py
+    │   ├── alpha_analysis.py
+    │   └── analyze_forecast_quality.py
     └── utils/
         ├── data_utils.py    # Data ingestion and preprocessing
         ├── model_utils.py   # Model creation, reweighing, forecasting
