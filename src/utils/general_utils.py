@@ -5,15 +5,14 @@ def parse_arguments():
     parser = argparse.ArgumentParser()
 
     parser.add_argument('--alpha', type=float, default=None)
-    parser.add_argument('--baseline_type', type=str, default='abcinml')
-    parser.add_argument('--sensitive_attribute', type=str)
-    parser.add_argument('--target_label', type=str)
-    parser.add_argument('--model_name', type=str)
-    parser.add_argument('--test_run', type=str, default='False')
+    parser.add_argument('--baseline_type', type=str, default='all', choices=['vanilla', 'static', 'dynamic', 'abcinml', 'all'])
+    parser.add_argument('--sensitive_attribute', type=str, default='IDADE_BIN')
+    parser.add_argument('--target_label', type=str, default='EVOLUCAO')
+    parser.add_argument('--model_name', type=str, choices=['logistic_regression', 'xgboost'])
+    parser.add_argument('--test_run', type=str, default='False', choices=['True', 'False'])
     parser.add_argument('--forecasting_technique', type=str, default='sma', choices=['sma', 'ema', 'oracle'])
     parser.add_argument('--forecast_window', type=int, default=5)
-    parser.add_argument('--batch_type', type=str, default='monthly')
-
+    parser.add_argument('--batch_type', type=str, default='monthly', choices=['monthly', 'weekly'])
     parser.add_argument('--alpha_ema', type=float, default=0.5)
 
     args = parser.parse_args()
