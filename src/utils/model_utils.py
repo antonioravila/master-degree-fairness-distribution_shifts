@@ -5,8 +5,8 @@ from sklearn.linear_model import LogisticRegression
 
 def initialize_model(model_name, MAX_ITER):
     models_mapping = {
-        'logistic_regression': LogisticRegression(max_iter=MAX_ITER),
-        'xgboost': xgb.XGBClassifier()
+        'logistic_regression': LogisticRegression(max_iter=MAX_ITER, solver='saga'),
+        'xgboost': xgb.XGBClassifier(device='cuda', tree_method='hist')
     }
 
     model = models_mapping.get(model_name)
