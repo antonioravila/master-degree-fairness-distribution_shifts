@@ -6,21 +6,22 @@ from datetime import datetime
 from pathlib import Path
 
 MODELS = ['logistic_regression', 'xgboost']
-TECHNIQUES = ['sma', 'ema', 'oracle']
+TECHNIQUES_WITH_WINDOW = ['sma']
+TECHNIQUES_NO_WINDOW = ['ema', 'oracle']
 WINDOWS = [3, 5, 10]
 BATCH_TYPES = ['monthly', 'weekly']
 
 # Conservative defaults — safe for RTX 3050 (4 GB VRAM).
 # For RTX Blackwell 8 GB: --max_xgb_workers 2 --max_lr_workers 4
 DEFAULT_XGB_WORKERS = 1
-DEFAULT_LR_WORKERS = 3
+DEFAULT_LR_WORKERS = 2
 
 
 def build_commands():
     commands = []
-    for window in WINDOWS:
-        for model in MODELS:
-            for technique in TECHNIQUES:
+    for model in MODELS:
+        for technique in TECHNIQUES_WITH_WINDOW:
+            for window in WINDOWS:
                 for batch_type in BATCH_TYPES:
                     commands.append({
                         'model': model,
@@ -33,6 +34,18 @@ def build_commands():
                             '--batch_type', batch_type,
                         ],
                     })
+        for technique in TECHNIQUES_NO_WINDOW:
+            for batch_type in BATCH_TYPES:
+                commands.append({
+                    'model': model,
+                    'label': f'{model} | {technique} | {batch_type}',
+                    'cmd': [
+                        'uv', 'run', 'src/main.py',
+                        '--model_name', model,
+                        '--forecasting_technique', technique,
+                        '--batch_type', batch_type,
+                    ],
+                })
     return commands
 
 
