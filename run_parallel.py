@@ -11,10 +11,33 @@ TECHNIQUES_NO_WINDOW = ['ema', 'oracle']
 WINDOWS = [3, 5, 10]
 BATCH_TYPES = ['monthly', 'weekly']
 
+# Must match general_utils.py defaults
+ALPHAS = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]
+SENSITIVE_ATTRIBUTE = 'IDADE_BIN'
+DEFAULT_FORECAST_WINDOW = 5  # used by ema/oracle (no --forecast_window passed)
+DEFAULT_ALPHA_EMA = 0.5
+
+RESULTS_BASE = Path('src/results')
+
 # Conservative defaults — safe for RTX 3050 (4 GB VRAM).
 # For RTX Blackwell 8 GB: --max_xgb_workers 2 --max_lr_workers 4
 DEFAULT_XGB_WORKERS = 1
 DEFAULT_LR_WORKERS = 2
+
+
+def _run_folder_name(model, alpha, technique, window, batch_type):
+    ema_suffix = f'_ema_{DEFAULT_ALPHA_EMA}' if technique == 'ema' else ''
+    return f'{model}_alpha_{alpha}_{technique}_window_{window}_{batch_type}{ema_suffix}'
+
+
+def is_scenario_complete(entry):
+    results_dir = RESULTS_BASE / SENSITIVE_ATTRIBUTE
+    return all(
+        (results_dir / _run_folder_name(
+            entry['model'], alpha, entry['technique'], entry['window'], entry['batch_type']
+        )).exists()
+        for alpha in ALPHAS
+    )
 
 
 def build_commands():
@@ -25,6 +48,9 @@ def build_commands():
                 for batch_type in BATCH_TYPES:
                     commands.append({
                         'model': model,
+                        'technique': technique,
+                        'window': window,
+                        'batch_type': batch_type,
                         'label': f'{model} | {technique} | window={window} | {batch_type}',
                         'cmd': [
                             'uv', 'run', 'src/main.py',
@@ -38,6 +64,9 @@ def build_commands():
             for batch_type in BATCH_TYPES:
                 commands.append({
                     'model': model,
+                    'technique': technique,
+                    'window': DEFAULT_FORECAST_WINDOW,
+                    'batch_type': batch_type,
                     'label': f'{model} | {technique} | {batch_type}',
                     'cmd': [
                         'uv', 'run', 'src/main.py',
@@ -92,8 +121,17 @@ def main():
     log_dir.mkdir(exist_ok=True)
 
     all_commands = build_commands()
-    xgb_commands = [c for c in all_commands if c['model'] == 'xgboost']
-    lr_commands = [c for c in all_commands if c['model'] == 'logistic_regression']
+
+    pending = [c for c in all_commands if not is_scenario_complete(c)]
+    skipped = len(all_commands) - len(pending)
+    if skipped:
+        print(f'Skipping {skipped} already-complete scenario(s).')
+    if not pending:
+        print('All scenarios complete. Nothing to run.')
+        return
+
+    xgb_commands = [c for c in pending if c['model'] == 'xgboost']
+    lr_commands = [c for c in pending if c['model'] == 'logistic_regression']
 
     print(
         f'Launching {len(lr_commands)} LR jobs (max_workers={args.max_lr_workers}) '

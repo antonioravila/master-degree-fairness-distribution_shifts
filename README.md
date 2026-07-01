@@ -376,6 +376,53 @@ uv run ruff format src/
 
 ---
 
+## Parallel Grid Run
+
+`run_parallel.py` runs the full experiment grid in parallel — two separate thread pools (one for LR, one for XGBoost) to avoid GPU/CPU contention.
+
+```bash
+# Run full grid (resumes automatically — skips already-complete scenarios)
+uv run python run_parallel.py
+
+# Custom worker counts (e.g. RTX Blackwell with 8 GB VRAM)
+uv run python run_parallel.py --max_xgb_workers 2 --max_lr_workers 4
+```
+
+Each run uses the default `sensitive_attribute=IDADE_BIN`. A scenario is considered **complete** when all 11 alpha folders (α = 0.0, 0.1, …, 1.0) exist under `src/results/IDADE_BIN/`. Incomplete or missing scenarios are re-run from scratch; complete ones are skipped.
+
+### Default scenario grid (20 commands)
+
+Each command produces 11 result folders (one per alpha value) plus a shared `baseline_non_abc_{model}_{batch_type}/` folder.
+
+| # | Model | Technique | Window | Batch |
+|---|-------|-----------|--------|-------|
+| 1 | logistic_regression | sma | 3 | monthly |
+| 2 | logistic_regression | sma | 3 | weekly |
+| 3 | logistic_regression | sma | 5 | monthly |
+| 4 | logistic_regression | sma | 5 | weekly |
+| 5 | logistic_regression | sma | 10 | monthly |
+| 6 | logistic_regression | sma | 10 | weekly |
+| 7 | logistic_regression | ema | 5* | monthly |
+| 8 | logistic_regression | ema | 5* | weekly |
+| 9 | logistic_regression | oracle | 5* | monthly |
+| 10 | logistic_regression | oracle | 5* | weekly |
+| 11 | xgboost | sma | 3 | monthly |
+| 12 | xgboost | sma | 3 | weekly |
+| 13 | xgboost | sma | 5 | monthly |
+| 14 | xgboost | sma | 5 | weekly |
+| 15 | xgboost | sma | 10 | monthly |
+| 16 | xgboost | sma | 10 | weekly |
+| 17 | xgboost | ema | 5* | monthly |
+| 18 | xgboost | ema | 5* | weekly |
+| 19 | xgboost | oracle | 5* | monthly |
+| 20 | xgboost | oracle | 5* | weekly |
+
+\* `ema` and `oracle` do not receive `--forecast_window`; they use the `general_utils.py` default of `5`.
+
+Logs for each command are written to `logs/` in the project root.
+
+---
+
 ## CLI Reference
 
 | Argument | Type | Default | Description |
