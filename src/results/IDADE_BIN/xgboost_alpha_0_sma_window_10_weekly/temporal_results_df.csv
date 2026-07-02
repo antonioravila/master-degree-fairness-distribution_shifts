@@ -1,0 +1,2 @@
+Maximum Bias,Temporal Stability,Maximum Bias Difference,baseline,model_name,forecast_window,forecasting_technique,batch_type,alpha_ema
+0.19840801886792453,0.01072592072686469,0.1871457693432792,abcinml,xgboost,10,sma,weekly,0.5
