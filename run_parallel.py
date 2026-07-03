@@ -30,14 +30,44 @@ def _run_folder_name(model, alpha, technique, window, batch_type):
     return f'{model}_alpha_{alpha}_{technique}_window_{window}_{batch_type}{ema_suffix}'
 
 
-def is_scenario_complete(entry):
+def _missing_alphas(entry):
     results_dir = RESULTS_BASE / SENSITIVE_ATTRIBUTE
-    return all(
-        (results_dir / _run_folder_name(
+    return [
+        alpha for alpha in ALPHAS
+        if not (results_dir / _run_folder_name(
             entry['model'], alpha, entry['technique'], entry['window'], entry['batch_type']
         )).exists()
-        for alpha in ALPHAS
-    )
+    ]
+
+
+def resolve_jobs(scenarios):
+    """Expand scenarios into runnable jobs.
+
+    - Complete (0 missing alphas): skipped.
+    - Not started (all 11 missing): full command submitted — one data load covers all alphas.
+    - Incomplete (1–10 missing): one job per missing alpha to avoid redoing finished work.
+    """
+    jobs = []
+    n_complete = 0
+
+    for entry in scenarios:
+        missing = _missing_alphas(entry)
+
+        if not missing:
+            n_complete += 1
+            continue
+
+        if len(missing) == len(ALPHAS):
+            jobs.append(entry)
+        else:
+            for alpha in missing:
+                jobs.append({
+                    **entry,
+                    'label': f'{entry["label"]} | α={alpha}',
+                    'cmd': entry['cmd'] + ['--alpha', str(alpha)],
+                })
+
+    return jobs, n_complete
 
 
 def build_commands():
@@ -80,7 +110,7 @@ def build_commands():
 
 def run_command(entry, log_dir: Path):
     label = entry['label']
-    log_path = log_dir / (label.replace(' | ', '_').replace('=', '') + '.log')
+    log_path = log_dir / (label.replace(' | ', '_').replace('=', '').replace('.', '') + '.log')
 
     print(f'[{_now()}] START  {label}')
     start = datetime.now()
@@ -120,22 +150,21 @@ def main():
     log_dir = Path('logs')
     log_dir.mkdir(exist_ok=True)
 
-    all_commands = build_commands()
+    scenarios = build_commands()
+    jobs, n_complete = resolve_jobs(scenarios)
 
-    pending = [c for c in all_commands if not is_scenario_complete(c)]
-    skipped = len(all_commands) - len(pending)
-    if skipped:
-        print(f'Skipping {skipped} already-complete scenario(s).')
-    if not pending:
+    if n_complete:
+        print(f'Skipping {n_complete} already-complete scenario(s).')
+    if not jobs:
         print('All scenarios complete. Nothing to run.')
         return
 
-    xgb_commands = [c for c in pending if c['model'] == 'xgboost']
-    lr_commands = [c for c in pending if c['model'] == 'logistic_regression']
+    xgb_jobs = [j for j in jobs if j['model'] == 'xgboost']
+    lr_jobs = [j for j in jobs if j['model'] == 'logistic_regression']
 
     print(
-        f'Launching {len(lr_commands)} LR jobs (max_workers={args.max_lr_workers}) '
-        f'and {len(xgb_commands)} XGBoost jobs (max_workers={args.max_xgb_workers}) '
+        f'Launching {len(lr_jobs)} LR jobs (max_workers={args.max_lr_workers}) '
+        f'and {len(xgb_jobs)} XGBoost jobs (max_workers={args.max_xgb_workers}) '
         f'in parallel pools. Logs → {log_dir}/\n'
     )
 
@@ -144,10 +173,10 @@ def main():
         concurrent.futures.ThreadPoolExecutor(max_workers=args.max_lr_workers) as lr_pool,
         concurrent.futures.ThreadPoolExecutor(max_workers=args.max_xgb_workers) as xgb_pool,
     ):
-        for cmd in lr_commands:
-            futures.append(lr_pool.submit(run_command, cmd, log_dir))
-        for cmd in xgb_commands:
-            futures.append(xgb_pool.submit(run_command, cmd, log_dir))
+        for job in lr_jobs:
+            futures.append(lr_pool.submit(run_command, job, log_dir))
+        for job in xgb_jobs:
+            futures.append(xgb_pool.submit(run_command, job, log_dir))
 
         results = [f.result() for f in concurrent.futures.as_completed(futures)]
 
