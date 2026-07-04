@@ -50,7 +50,8 @@ def _batch_to_datetime(labels: list, batch_type: str) -> pd.DatetimeIndex:
 
 def _run_folder_name(model_name, alpha, forecasting_technique, forecast_window, batch_type, alpha_ema):
     ema_suffix = f'_ema_{alpha_ema}' if forecasting_technique == 'ema' else ''
-    return f'{model_name}_alpha_{alpha}_{forecasting_technique}_window_{forecast_window}_{batch_type}{ema_suffix}'
+    alpha_str = str(int(alpha)) if float(alpha) == int(float(alpha)) else str(alpha)
+    return f'{model_name}_alpha_{alpha_str}_{forecasting_technique}_window_{forecast_window}_{batch_type}{ema_suffix}'
 
 
 def baseline_non_abc_folder_name(model_name, batch_type):
