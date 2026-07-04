@@ -25,18 +25,31 @@ DEFAULT_XGB_WORKERS = 1
 DEFAULT_LR_WORKERS = 2
 
 
+def _fmt_alpha(alpha):
+    """Normalize alpha to int when whole number: 1.0 → 1, 0.1 → 0.1."""
+    f = float(alpha)
+    return int(f) if f == int(f) else f
+
+
 def _run_folder_name(model, alpha, technique, window, batch_type):
     ema_suffix = f'_ema_{DEFAULT_ALPHA_EMA}' if technique == 'ema' else ''
-    return f'{model}_alpha_{alpha}_{technique}_window_{window}_{batch_type}{ema_suffix}'
+    return f'{model}_alpha_{_fmt_alpha(alpha)}_{technique}_window_{window}_{batch_type}{ema_suffix}'
+
+
+def _folder_exists(results_dir, model, alpha, technique, window, batch_type):
+    """Check both alpha_1 and alpha_1.0 formats for backward compat with existing results."""
+    primary = results_dir / _run_folder_name(model, alpha, technique, window, batch_type)
+    alt = results_dir / _run_folder_name(model, float(alpha), technique, window, batch_type)
+    return primary.exists() or alt.exists()
 
 
 def _missing_alphas(entry):
     results_dir = RESULTS_BASE / SENSITIVE_ATTRIBUTE
     return [
         alpha for alpha in ALPHAS
-        if not (results_dir / _run_folder_name(
-            entry['model'], alpha, entry['technique'], entry['window'], entry['batch_type']
-        )).exists()
+        if not _folder_exists(
+            results_dir, entry['model'], alpha, entry['technique'], entry['window'], entry['batch_type']
+        )
     ]
 
 
