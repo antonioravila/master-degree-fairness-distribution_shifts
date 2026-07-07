@@ -20,7 +20,7 @@ import pandas as pd
 _SRC = Path(__file__).parent.parent
 sys.path.insert(0, str(_SRC))
 
-from utils import data_utils, metrics_utils, model_utils
+from utils import data_utils, general_utils, metrics_utils, model_utils
 
 _PROPORTIONS = ['S0_Y0', 'S0_Y1', 'S1_Y0', 'S1_Y1']
 _FORECASTERS = ['sma', 'ema']
@@ -190,6 +190,9 @@ def main():
 
     batch_type = _batch_type_from_window_column(args.window_column)
 
+    # forecast_window is given in months; convert to batches for the chosen batch_type.
+    forecast_window_batches = general_utils.effective_forecast_window(args.forecast_window, batch_type)
+
     print('Loading data...')
     df = data_utils.pre_process_df(args.sensitive_attribute, args.window_column)
 
@@ -199,7 +202,7 @@ def main():
         window_column=args.window_column,
         sensitive_attribute=args.sensitive_attribute,
         target_label=args.target_label,
-        forecast_window=args.forecast_window,
+        forecast_window=forecast_window_batches,
         ema_alpha=args.ema_alpha,
     )
 

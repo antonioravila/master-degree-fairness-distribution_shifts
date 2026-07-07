@@ -1,2 +1,0 @@
-Maximum Bias,Temporal Stability,Maximum Bias Difference,baseline,model_name,forecast_window,forecasting_technique,batch_type,alpha_ema
-0.2347044590390598,0.01292220582308299,0.20641423951932364,abcinml,logistic_regression,5,oracle,weekly,0.5

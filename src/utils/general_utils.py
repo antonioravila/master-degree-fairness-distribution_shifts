@@ -46,6 +46,19 @@ def get_window_column(batch_type):
     return window_column
 
 
+# forecast_window is always expressed in months. For weekly batches it must be
+# converted to an equivalent number of week-batches so that a given
+# forecast_window means the same real-world horizon regardless of batch_type.
+WEEKS_PER_MONTH = 52 / 12  # ≈ 4.333
+
+
+def effective_forecast_window(forecast_window_months, batch_type):
+    """Convert forecast_window (in months) to the number of batches for batch_type."""
+    if batch_type == 'weekly':
+        return max(1, round(forecast_window_months * WEEKS_PER_MONTH))
+    return forecast_window_months
+
+
 def initialize_variables(df, window_column, alpha_ema=0.5):
     batches = sorted(df[window_column].unique())
 

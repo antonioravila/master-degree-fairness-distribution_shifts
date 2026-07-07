@@ -12,7 +12,7 @@ def run_baseline(
     target_label: str,
     baseline_type: str,
     alpha: float,
-    forecast_window: int,
+    forecast_window_batches: int,
     model_name: str,
     forecasting_technique: str,
     alpha_ema: float,
@@ -92,13 +92,13 @@ def run_baseline(
                             sensitive_attribute=sensitive_attribute,
                             target_label=target_label,
                             historical_proportions=historical_proportions,
-                            window=forecast_window,
+                            window=forecast_window_batches,
                             alpha_ema=alpha_ema,
                         )
                     else:
                         forecasted_distributions = model_utils.forecast_joint_distributions(
                             historical_proportions,
-                            window=forecast_window,
+                            window=forecast_window_batches,
                             forecasting_technique=forecasting_technique,
                             alpha_ema=alpha_ema,
                         )
@@ -122,7 +122,7 @@ def run_baseline(
                 model = model_utils.initialize_model(model_name, MAX_ITER=_MAX_ITER)
                 model.fit(X_train, y_train, sample_weight=sample_weights)
 
-        should_test = X_test is not None and i >= forecast_window
+        should_test = X_test is not None and i >= forecast_window_batches
 
         if should_test:
             y_pred = model.predict(X_test)
@@ -194,6 +194,10 @@ def main():
 
     window_column = general_utils.get_window_column(batch_type)
 
+    # forecast_window is given in months; convert to the number of batches so the
+    # forecasting horizon and warm-up are the same real duration for any batch_type.
+    forecast_window_batches = general_utils.effective_forecast_window(forecast_window, batch_type)
+
     df = data_utils.pre_process_df(
         sensitive_attribute,
         window_column,
@@ -234,7 +238,7 @@ def main():
                     target_label=target_label,
                     baseline_type=bt,
                     alpha=0,
-                    forecast_window=forecast_window,
+                    forecast_window_batches=forecast_window_batches,
                     model_name=model_name,
                     forecasting_technique=forecasting_technique,
                     alpha_ema=alpha_ema,
@@ -285,7 +289,7 @@ def main():
                 target_label=target_label,
                 baseline_type='abcinml',
                 alpha=alpha,
-                forecast_window=forecast_window,
+                forecast_window_batches=forecast_window_batches,
                 model_name=model_name,
                 forecasting_technique=forecasting_technique,
                 alpha_ema=alpha_ema,
