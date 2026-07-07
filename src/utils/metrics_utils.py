@@ -21,12 +21,14 @@ _SNAPSHOT_METRICS = [
 _FIGURES_DIR = os.path.join(os.path.dirname(__file__), '..', 'figures')
 _N_BINS = 6
 
+# Cores fixas da paleta seaborn 'deep' (5 cores), na mesma convenção
+# período→cor do notebook 01_eda_distribution_shift.ipynb
 _PERIOD_SPANS = [
-    ('2019-02-01', '2020-03-01', 'pré-pandemia',     '#AED6F1'),
-    ('2020-03-01', '2022-01-01', 'pandemia aguda 1', '#F1948A'),
-    ('2022-01-01', '2023-01-01', 'pandemia aguda 2', '#F0B27A'),
-    ('2023-01-01', '2024-01-01', 'transição',         '#A9DFBF'),
-    ('2024-01-01', '2026-03-01', 'endêmico',          '#D2B4DE'),
+    ('2019-02-01', '2020-03-01', 'pré-pandemia',     '#4C72B0'),
+    ('2020-03-01', '2022-01-01', 'pandemia aguda 1', '#DD8452'),
+    ('2022-01-01', '2023-01-01', 'pandemia aguda 2', '#55A868'),
+    ('2023-01-01', '2024-01-01', 'transição',         '#C44E52'),
+    ('2024-01-01', '2026-03-01', 'endêmico',          '#8172B3'),
 ]
 
 _VLINES = [

@@ -2,8 +2,9 @@
 Concatenates CSV results across all subfolders of src/results/IDADE_BIN/
 and writes the merged files to src/results/all/.
 
-Folder name convention: {model_name}_alpha_{alpha}_{forecasting_technique}_window_{forecast_window}
-Example: xgboost_alpha_0.1_ema_window_10
+Handles two folder naming conventions:
+  baseline_non_abc_{model_name}_{batch_type}
+  {model_name}_alpha_{alpha}_{technique}_window_{forecast_window}_{batch_type}[_ema_{alpha_ema}]
 """
 
 import re
@@ -21,40 +22,64 @@ CSV_FILES = [
     'temporal_results_df.csv',
 ]
 
-# Matches: {model_name}_alpha_{alpha}_{forecasting_technique}_window_{forecast_window}
-_FOLDER_RE = re.compile(r'^(.+)_alpha_[\d.]+_(.+)_window_(\d+)$')
+_ABC_RE = re.compile(
+    r'^(?P<model>.+)_alpha_(?P<alpha>[\d.]+)_(?P<technique>.+)_window_(?P<window>\d+)_(?P<batch>monthly|weekly)(?:_ema_(?P<alpha_ema>[\d.]+))?$'
+)
+_BASELINE_RE = re.compile(
+    r'^baseline_non_abc_(?P<model>.+)_(?P<batch>monthly|weekly)$'
+)
 
 
-def _parse_folder(name: str) -> dict[str, str]:
-    m = _FOLDER_RE.match(name)
-    if not m:
-        raise ValueError(f'Folder name does not match expected pattern: {name!r}')
-    return {
-        'model_name': m.group(1),
-        'forecasting_technique': m.group(2),
-        'forecast_window': m.group(3),
-    }
+def _parse_folder(name: str) -> dict | None:
+    m = _ABC_RE.match(name)
+    if m:
+        return {
+            'model_name': m.group('model'),
+            'alpha': m.group('alpha'),
+            'forecasting_technique': m.group('technique'),
+            'forecast_window': m.group('window'),
+            'batch_type': m.group('batch'),
+            'alpha_ema': m.group('alpha_ema'),
+        }
+    m = _BASELINE_RE.match(name)
+    if m:
+        return {
+            'model_name': m.group('model'),
+            'alpha': None,
+            'forecasting_technique': None,
+            'forecast_window': None,
+            'batch_type': m.group('batch'),
+            'alpha_ema': None,
+        }
+    return None
 
 
 def main() -> None:
     OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     buckets: dict[str, list[pd.DataFrame]] = {name: [] for name in CSV_FILES}
+    skipped = []
 
     for folder in sorted(SOURCE_DIR.iterdir()):
         if not folder.is_dir():
             continue
         meta = _parse_folder(folder.name)
+        if meta is None:
+            skipped.append(folder.name)
+            continue
         for csv_name in CSV_FILES:
             csv_path = folder / csv_name
             if csv_path.exists():
                 df = pd.read_csv(csv_path)
-                df['model_name'] = meta['model_name']
-                df['forecasting_technique'] = meta['forecasting_technique']
-                df['forecast_window'] = meta['forecast_window']
+                for key, val in meta.items():
+                    if val is not None:
+                        df[key] = val
                 buckets[csv_name].append(df)
             else:
                 print(f'Warning: {csv_path} not found, skipping.')
+
+    if skipped:
+        print(f'Skipped {len(skipped)} unrecognized folder(s): {skipped}')
 
     for csv_name, frames in buckets.items():
         if not frames:
