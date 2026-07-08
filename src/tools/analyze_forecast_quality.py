@@ -181,7 +181,7 @@ def plot_error_over_time(df: pd.DataFrame, batch_type: str, out_path: Path) -> N
 
 def main():
     parser = argparse.ArgumentParser(description='Evaluate forecast quality (SMA vs EMA)')
-    parser.add_argument('--sensitive_attribute', type=str, required=True)
+    parser.add_argument('--sensitive_attribute', type=str, default='IDADE_BIN')
     parser.add_argument('--target_label', type=str, default='EVOLUCAO')
     parser.add_argument('--window_column', type=str, default='YEAR-MONTH')
     parser.add_argument('--forecast_window', type=int, default=10)
