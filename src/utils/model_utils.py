@@ -221,6 +221,82 @@ def compute_margins(model, X: pd.DataFrame, decision_boundary: float = 0.5) -> n
     return np.abs(proba - decision_boundary)
 
 
+def _apr_eq17_factor(f1, f2, denom_count, m_scale, subgroup_alpha):
+    """One complete Eq. 17 (Hu et al.) multiplicative factor for a single subgroup.
+
+        factor = (f1 * f2 + a_sub) / (m_scale * denom_count + a_sub)
+
+    ``W_{y,a}^(t) = W_{y,a}^(t-1) * factor``. Every argument MUST come from a
+    single source — all current-batch counts, or all forecast-derived expected
+    counts — never a mix, so the numerator (an independence-implied ``P_exp``) and
+    the denominator (an observed ``P_obs``) stay probabilistically consistent.
+    Returns ``None`` when the denominator collapses (no data), meaning "leave
+    ``W_{y,a}`` unchanged".
+    """
+    denominator = m_scale * denom_count + subgroup_alpha
+    if denominator <= 0.0:
+        return None
+    return (f1 * f2 + subgroup_alpha) / denominator
+
+
+def _apr_current_counts(y, a, y_pred, sensitive_attribute_values, y_true_values, fairness_measure, m):
+    """``(f1, f2, denom_count, m_scale)`` for Eq. 17 from the CURRENT batch only.
+
+    - ``demographic_parity`` (Algorithm 1, Eq. 17): ``|{y_pred = y}| * |{a = a}|``
+      over ``m * |{y_pred = y, a = a}|``.
+    - ``equalized_odds`` / ``equal_opportunity`` (Algorithm 2/3): counts are
+      conditioned on a correct prediction — ``|{y_pred = y, y = y}| *
+      |{y = y, a = a}|`` over ``m_{y,*} * |{y_pred = y, y = y, a = a}|``.
+    """
+    a_mask = sensitive_attribute_values == a
+    if fairness_measure == 'demographic_parity':
+        pred_y_mask = y_pred == y
+        f1 = float(np.sum(pred_y_mask))                   # |{y_pred = y}|
+        f2 = float(np.sum(a_mask))                        # |{a = a}|
+        denom_count = float(np.sum(pred_y_mask & a_mask))  # |{y_pred = y, a = a}|
+        m_scale = float(m)
+    else:  # equalized_odds / equal_opportunity
+        true_y_mask = y_true_values == y
+        correct_y_mask = (y_pred == y) & true_y_mask
+        f1 = float(np.sum(correct_y_mask))               # |{y_pred = y, y = y}|
+        f2 = float(np.sum(true_y_mask & a_mask))         # |{y = y, a = a}|
+        denom_count = float(np.sum(correct_y_mask & a_mask))  # |{y_pred = y, y = y, a = a}|
+        m_scale = float(np.sum(true_y_mask))             # m_{y,*}
+    return f1, f2, denom_count, m_scale
+
+
+def _apr_forecast_counts(y, a, forecasted_distributions, fairness_measure, m):
+    """``(f1, f2, denom_count, m_scale)`` for Eq. 17 derived ENTIRELY from the four
+    forecast joint proportions in ``forecasted_distributions`` (``S0_Y1``,
+    ``S0_Y0``, ``S1_Y1``, ``S1_Y0``), by summing them into the needed marginals —
+    the same pattern :func:`weight_estimation_anticipated` uses for K&C. Counts
+    are placed on the current batch's ``m`` scale so the resulting Eq. 17 factor
+    is directly comparable to the current-batch one before blending.
+
+    For ``demographic_parity`` this reproduces exactly the K&C anticipated ratio
+    ``P(Y=y) P(A=a) / P(Y=y, A=a)``. For ``equalized_odds`` / ``equal_opportunity``
+    the forecast carries no information about *prediction correctness* (it only
+    knows the (S, Y) base rates), so ``f1 == m_scale`` and ``f2 == denom_count``
+    by construction and the factor is ~1 (exactly 1 as ``subgroup_alpha -> 0``):
+    a joint (S, Y) forecast cannot anticipate an equalized-odds violation, only a
+    demographic-parity-style base-rate shift.
+    """
+    p_y = forecasted_distributions[f'S0_Y{y}'] + forecasted_distributions[f'S1_Y{y}']
+    p_a = forecasted_distributions[f'S{a}_Y0'] + forecasted_distributions[f'S{a}_Y1']
+    p_ya = forecasted_distributions[f'S{a}_Y{y}']
+    if fairness_measure == 'demographic_parity':
+        f1 = m * p_y            # expected |{y_pred = y}|
+        f2 = m * p_a            # expected |{a = a}|
+        denom_count = m * p_ya  # expected |{y_pred = y, a = a}|
+        m_scale = float(m)
+    else:  # equalized_odds / equal_opportunity (no correctness signal in forecast)
+        f1 = m * p_y            # expected |{y_pred = y, y = y}|  (predictions assumed correct)
+        f2 = m * p_ya           # expected |{y = y, a = a}|
+        denom_count = m * p_ya  # expected |{y_pred = y, y = y, a = a}|
+        m_scale = m * p_y       # expected m_{y,*}
+    return f1, f2, denom_count, m_scale
+
+
 def update_apr_subgroup_weights(
     prev_W: dict,
     y_pred: np.array,
@@ -234,28 +310,26 @@ def update_apr_subgroup_weights(
     """Multiplicative subgroup-weight update (Eq. 17 / Algorithms 1-3, Hu et al.).
 
     ``prev_W`` maps ``(y, a) -> W_{y,a}^(t-1)`` for the four (label, sensitive)
-    subgroups; the returned dict holds ``W_{y,a}^(t)``.
+    subgroups; the returned dict holds ``W_{y,a}^(t)``. ``fairness_measure``
+    selects Algorithm 1 (``demographic_parity``), Algorithm 2 (``equalized_odds``)
+    or Algorithm 3 (``equal_opportunity`` — only the ``y = 1`` subgroups updated,
+    ``y = 0`` keeps ``W_{0,a}^(0) = 1``). ``subgroup_alpha`` is the paper's
+    ``alpha`` smoothing constant (``apr_subgroup_alpha`` on the CLI).
 
-    - ``demographic_parity`` (Algorithm 1, Eq. 17): numerator uses the raw
-      predicted-label counts ``|{i: y_pred_i = y}| * |{i: a_i = a}|`` and the
-      denominator scale is ``m``.
-    - ``equalized_odds`` (Algorithm 2): counts are conditioned on a correct
-      prediction, ``|{i: y_pred_i = y, y_i = y}| * |{i: y_i = y, a_i = a}|`` with
-      denominator scale ``m_{y,*} = |{i: y_i = y}|``.
-    - ``equal_opportunity`` (Algorithm 3): only the ``y = 1`` subgroups are
-      updated (Algorithm 2 form restricted to ``y = 1``); the ``y = 0`` subgroups
-      keep their initial ``W_{0,a}^(0) = 1``.
+    ABCInML forecasting (only when ``baseline_type == 'abcinml'``, i.e. both
+    ``alpha`` and ``forecasted_distributions`` are given): mirrors exactly how
+    :func:`reweigh_df` blends K&C — two *complete* Eq. 17 updates are computed
+    independently and blended only at the end::
 
-    ABCInML forecasting hook (used only when ``baseline_type == 'abcinml'``, i.e.
-    both ``alpha`` and ``forecasted_distributions`` are given): the *numerator*
-    count product is blended with an expected-count version derived from
-    ``forecasted_distributions`` (the same dict consumed by
-    :func:`weight_estimation_anticipated`), following the CLI ``alpha`` blend
-    ``num = alpha * num_current + (1 - alpha) * num_forecast``. The
-    ``+ subgroup_alpha`` smoothing and the denominator stay based on the current
-    batch only, and Eq. 18 (per-sample margin term) is left untouched by the
-    forecast, because ``forecasted_distributions`` only carries subgroup-level
-    aggregates.
+        W_current  = W_prev * eq17(current-batch counts)          # all P_obs from now
+        W_forecast = W_prev * eq17(forecast expected counts)      # all P_obs from forecast
+        W_{y,a}    = alpha * W_current + (1 - alpha) * W_forecast
+
+    where ``alpha`` is the CLI ABCInML blend (NOT ``subgroup_alpha``). Numerator
+    and denominator of each Eq. 17 update come from a single source — never a
+    present/forecast mix inside one fraction. Eq. 18 (per-sample margin term) is
+    left untouched by the forecast: ``forecasted_distributions`` only carries
+    subgroup-level aggregates.
     """
     m = len(y_pred)
     W = dict(prev_W)
@@ -268,49 +342,26 @@ def update_apr_subgroup_weights(
     use_forecast = alpha is not None and forecasted_distributions is not None
 
     for y, a in pairs:
-        a_mask = sensitive_attribute_values == a
+        f1_c, f2_c, dc_c, ms_c = _apr_current_counts(
+            y, a, y_pred, sensitive_attribute_values, y_true_values, fairness_measure, m
+        )
+        factor_current = _apr_eq17_factor(f1_c, f2_c, dc_c, ms_c, subgroup_alpha)
 
-        if fairness_measure == 'demographic_parity':
-            pred_y_mask = y_pred == y
-            count_f1 = float(np.sum(pred_y_mask))                 # |{y_pred = y}|
-            count_f2 = float(np.sum(a_mask))                      # |{a = a}|
-            count_denom = float(np.sum(pred_y_mask & a_mask))     # |{y_pred = y, a = a}|
-            m_scale = float(m)
-        else:  # equalized_odds / equal_opportunity
-            true_y_mask = y_true_values == y
-            correct_y_mask = (y_pred == y) & true_y_mask
-            count_f1 = float(np.sum(correct_y_mask))              # |{y_pred = y, y = y}|
-            count_f2 = float(np.sum(true_y_mask & a_mask))        # |{y = y, a = a}|
-            count_denom = float(np.sum(correct_y_mask & a_mask))  # |{y_pred = y, y = y, a = a}|
-            m_scale = float(np.sum(true_y_mask))                  # m_{y,*}
-
-        numerator_current = count_f1 * count_f2
-
-        if use_forecast:
-            p_a_fc = (
-                forecasted_distributions[f'S{a}_Y0']
-                + forecasted_distributions[f'S{a}_Y1']
-            )
-            p_y_fc = (
-                forecasted_distributions[f'S0_Y{y}']
-                + forecasted_distributions[f'S1_Y{y}']
-            )
-            if fairness_measure == 'demographic_parity':
-                f1_fc = m * p_y_fc                                # expected |{y_pred = y}|
-                f2_fc = m * p_a_fc                                # expected |{a = a}|
-            else:
-                f1_fc = m * p_y_fc                                # expected |{y_pred = y, y = y}|
-                f2_fc = m * forecasted_distributions[f'S{a}_Y{y}']  # expected |{y = y, a = a}|
-            numerator_forecast = f1_fc * f2_fc
-            numerator = alpha * numerator_current + (1.0 - alpha) * numerator_forecast
-        else:
-            numerator = numerator_current
-
-        denominator = m_scale * count_denom + subgroup_alpha
-        if denominator <= 0.0:
-            # no samples for this subgroup this batch — leave the weight unchanged
+        if not use_forecast:
+            if factor_current is not None:
+                W[(y, a)] = prev_W[(y, a)] * factor_current
             continue
-        W[(y, a)] = prev_W[(y, a)] * (numerator + subgroup_alpha) / denominator
+
+        # Two complete Eq. 17 updates, blended only on the finished results —
+        # same pattern as reweigh_df's K&C w_current / w_future blend.
+        f1_f, f2_f, dc_f, ms_f = _apr_forecast_counts(
+            y, a, forecasted_distributions, fairness_measure, m
+        )
+        factor_forecast = _apr_eq17_factor(f1_f, f2_f, dc_f, ms_f, subgroup_alpha)
+
+        w_current = prev_W[(y, a)] * factor_current if factor_current is not None else prev_W[(y, a)]
+        w_forecast = prev_W[(y, a)] * factor_forecast if factor_forecast is not None else prev_W[(y, a)]
+        W[(y, a)] = alpha * w_current + (1.0 - alpha) * w_forecast
 
     return W
 
@@ -419,8 +470,9 @@ def adaptive_priority_reweighing(
     Algorithm 2 (``equalized_odds``) or Algorithm 3 (``equal_opportunity``).
 
     ABCInML integration: when ``alpha`` and ``forecasted_distributions`` are
-    supplied (only for ``baseline_type == 'abcinml'``), the Eq. 17 numerator is
-    blended with the forecasted joint distribution — see
+    supplied (only for ``baseline_type == 'abcinml'``), each subgroup weight is a
+    blend of two *complete* Eq. 17 updates (one from the current batch, one from
+    the forecast) — ``alpha`` is the CLI ABCInML blend, see
     :func:`update_apr_subgroup_weights`. Eq. 18 stays present-only.
 
     Returns ``(fitted_model, final_sample_weights)``.
@@ -515,7 +567,8 @@ def fit_fair_model(
       (Hu et al., Algorithms 1-3) via :func:`adaptive_priority_reweighing`, which
       owns its internal train/reweigh loop and returns an already-fitted model.
       ``alpha`` / ``forecasted_distributions`` are forwarded only for
-      ``baseline_type == 'abcinml'``.
+      ``baseline_type == 'abcinml'`` (for ``static`` / ``dynamic`` they are
+      ``None``, so the CLI ``alpha`` sweep never re-runs APR for those baselines).
 
     Returns ``(fitted_model, sample_weights)``; ``sample_weights`` is ``None`` for
     ``vanilla``.
