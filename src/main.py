@@ -16,6 +16,12 @@ def run_baseline(
     model_name: str,
     forecasting_technique: str,
     alpha_ema: float,
+    fairness_correction: str,
+    apr_iterations: int = 20,
+    apr_eta: float = 1.0,
+    apr_subgroup_alpha: float = 100.0,
+    apr_decision_boundary: float = 0.5,
+    apr_fairness_measure: str = 'equalized_odds',
 ) -> None:
 
     _MAX_ITER = 1000
@@ -47,7 +53,7 @@ def run_baseline(
         )
 
         if baseline_type in ['vanilla', 'static']:
-            X_train, y_train, X_test, y_test = model_utils.get_train_and_test(
+            X_train, y_train, X_test, y_test = model_utils._get_train_and_test(
                 df=current_batch_df,
                 baseline_type=baseline_type,
                 window_column=window_column,
@@ -57,20 +63,25 @@ def run_baseline(
             )
 
             if X_train is not None:
-                if baseline_type == 'static':
-                    sample_weights = model_utils.reweigh_df(
-                        X_train,
-                        y_train,
-                        sensitive_attribute,
-                        target_label,
-                        baseline_type,
-                    )
-
                 print(f'(1.1.3) training {model_name} model')
 
-                model = model_utils.initialize_model(model_name, MAX_ITER=_MAX_ITER)
-
-                model.fit(X_train, y_train, sample_weight=sample_weights)
+                model, sample_weights = model_utils.fit_fair_model(
+                    X_train,
+                    y_train,
+                    sensitive_attribute,
+                    target_label,
+                    model_name,
+                    baseline_type,
+                    fairness_correction,
+                    _MAX_ITER,
+                    alpha=alpha,
+                    forecasted_distributions=forecasted_distributions,
+                    apr_iterations=apr_iterations,
+                    apr_eta=apr_eta,
+                    apr_subgroup_alpha=apr_subgroup_alpha,
+                    apr_decision_boundary=apr_decision_boundary,
+                    apr_fairness_measure=apr_fairness_measure,
+                )
 
         if baseline_type in ['dynamic', 'abcinml']:
             if i == 0:
@@ -108,19 +119,24 @@ def run_baseline(
                         accumulated_train_df = pd.concat([accumulated_train_df, current_batch_df], ignore_index=True)
                         continue
 
-                sample_weights = model_utils.reweigh_df(
+                print(f'(1.1.3) training {model_name} model')
+                model, sample_weights = model_utils.fit_fair_model(
                     X_train,
                     y_train,
                     sensitive_attribute,
                     target_label,
+                    model_name,
                     baseline_type,
+                    fairness_correction,
+                    _MAX_ITER,
                     alpha=alpha,
                     forecasted_distributions=forecasted_distributions,
+                    apr_iterations=apr_iterations,
+                    apr_eta=apr_eta,
+                    apr_subgroup_alpha=apr_subgroup_alpha,
+                    apr_decision_boundary=apr_decision_boundary,
+                    apr_fairness_measure=apr_fairness_measure,
                 )
-
-                print(f'(1.1.3) training {model_name} model')
-                model = model_utils.initialize_model(model_name, MAX_ITER=_MAX_ITER)
-                model.fit(X_train, y_train, sample_weight=sample_weights)
 
         should_test = X_test is not None and i >= forecast_window_batches
 
@@ -173,13 +189,14 @@ def run_baseline(
     return assessment_metrics, temporal_metrics, shap_records, absolute_rates
 
 
-def _attach_metadata(dfs, model_name, forecast_window, forecasting_technique, batch_type, alpha_ema):
+def _attach_metadata(dfs, model_name, forecast_window, forecasting_technique, batch_type, alpha_ema, fairness_correction):
     for df in dfs:
         df['model_name'] = model_name
         df['forecast_window'] = forecast_window
         df['forecasting_technique'] = forecasting_technique
         df['batch_type'] = batch_type
         df['alpha_ema'] = alpha_ema
+        df['fairness_correction'] = fairness_correction
 
 
 def main():
@@ -188,7 +205,7 @@ def main():
     _ALL_BASELINES = ['vanilla', 'static', 'dynamic', 'abcinml']
     _NON_ABC_BASELINES = ['vanilla', 'static', 'dynamic']
 
-    alphas, baseline_type, sensitive_attribute, target_label, model_name, test_run, forecasting_technique, forecast_window, batch_type, alpha_ema = (
+    alphas, baseline_type, sensitive_attribute, target_label, model_name, test_run, forecasting_technique, forecast_window, batch_type, alpha_ema, fairness_correction, apr_iterations, apr_eta, apr_subgroup_alpha, apr_decision_boundary, apr_fairness_measure = (
         general_utils.parse_arguments()
     )
 
@@ -217,7 +234,7 @@ def main():
     non_abc_shap_records = []
 
     if non_abc_to_run:
-        non_abc_folder = metrics_utils.baseline_non_abc_folder_name(model_name, batch_type)
+        non_abc_folder = metrics_utils.baseline_non_abc_folder_name(model_name, batch_type, fairness_correction)
         non_abc_results_dir = os.path.join('src', 'results', sensitive_attribute, non_abc_folder)
         non_abc_assessment_path = os.path.join(non_abc_results_dir, 'assessment_all_baselines.csv')
         non_abc_subfolder = os.path.join(sensitive_attribute, non_abc_folder)
@@ -242,6 +259,12 @@ def main():
                     model_name=model_name,
                     forecasting_technique=forecasting_technique,
                     alpha_ema=alpha_ema,
+                    fairness_correction=fairness_correction,
+                    apr_iterations=apr_iterations,
+                    apr_eta=apr_eta,
+                    apr_subgroup_alpha=apr_subgroup_alpha,
+                    apr_decision_boundary=apr_decision_boundary,
+                    apr_fairness_measure=apr_fairness_measure,
                 )
                 assessment_metrics['baseline'] = bt
                 temporal_metrics['baseline'] = bt
@@ -249,6 +272,7 @@ def main():
                 _attach_metadata(
                     (assessment_metrics, temporal_metrics, absolute_rates),
                     model_name, forecast_window, forecasting_technique, batch_type, alpha_ema,
+                    fairness_correction,
                 )
 
                 non_abc_assessment_df = pd.concat([non_abc_assessment_df, assessment_metrics], ignore_index=True)
@@ -258,7 +282,7 @@ def main():
 
             metrics_utils.save_baseline_non_abc_results(
                 sensitive_attribute, non_abc_assessment_df, non_abc_temporal_df, non_abc_absolute_df,
-                model_name, batch_type,
+                model_name, batch_type, fairness_correction,
             )
             metrics_utils.generate_all_charts(
                 baseline_type='all' if len(non_abc_to_run) > 1 else non_abc_to_run[0],
@@ -274,6 +298,7 @@ def main():
                 forecasting_technique=forecasting_technique,
                 batch_type=batch_type,
                 alpha_ema=alpha_ema,
+                fairness_correction=fairness_correction,
                 subfolder_override=non_abc_subfolder,
             )
 
@@ -293,6 +318,12 @@ def main():
                 model_name=model_name,
                 forecasting_technique=forecasting_technique,
                 alpha_ema=alpha_ema,
+                fairness_correction=fairness_correction,
+                apr_iterations=apr_iterations,
+                apr_eta=apr_eta,
+                apr_subgroup_alpha=apr_subgroup_alpha,
+                apr_decision_boundary=apr_decision_boundary,
+                apr_fairness_measure=apr_fairness_measure,
             )
             assessment_metrics['baseline'] = 'abcinml'
             temporal_metrics['baseline'] = 'abcinml'
@@ -300,6 +331,7 @@ def main():
             _attach_metadata(
                 (assessment_metrics, temporal_metrics, absolute_rates),
                 model_name, forecast_window, forecasting_technique, batch_type, alpha_ema,
+                fairness_correction,
             )
 
             metrics_utils.save_results(
@@ -308,6 +340,7 @@ def main():
                 temporal_metrics,
                 absolute_rates,
                 model_name, alpha, forecast_window, forecasting_technique, batch_type, alpha_ema,
+                fairness_correction,
             )
 
             # Combine with non-abc results so comparative charts include all baselines
@@ -330,6 +363,7 @@ def main():
                 forecasting_technique=forecasting_technique,
                 batch_type=batch_type,
                 alpha_ema=alpha_ema,
+                fairness_correction=fairness_correction,
             )
 
     print('finished training.')

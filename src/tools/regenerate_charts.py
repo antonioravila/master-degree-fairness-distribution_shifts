@@ -28,8 +28,9 @@ _CSV_ASSESSMENT = 'assessment_all_baselines.csv'
 _CSV_TEMPORAL = 'temporal_results_df.csv'
 _CSV_ABSOLUTE = 'absolute_results_df.csv'
 
-# Matches the optional _ema_{alpha_ema} suffix that appears after the batch_type token
-_EMA_SUFFIX_RE = re.compile(r'(?:monthly|weekly)_ema_([\d.]+)$')
+# Matches the optional _ema_{alpha_ema} suffix that appears after the batch_type token,
+# tolerating an optional trailing _{fairness_correction} suffix (e.g. _adaptative_rw).
+_EMA_SUFFIX_RE = re.compile(r'(?:monthly|weekly)_ema_([\d.]+)(?:_[a-z_]+)?$')
 
 
 def _parse_alpha_ema(folder_name: str) -> float | None:
@@ -37,8 +38,8 @@ def _parse_alpha_ema(folder_name: str) -> float | None:
     return float(m.group(1)) if m else None
 
 
-def _load_non_abc(run_dir: Path, model_name: str, batch_type: str) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
-    non_abc_folder = metrics_utils.baseline_non_abc_folder_name(model_name, batch_type)
+def _load_non_abc(run_dir: Path, model_name: str, batch_type: str, fairness_correction: str) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    non_abc_folder = metrics_utils.baseline_non_abc_folder_name(model_name, batch_type, fairness_correction)
     non_abc_dir = run_dir.parent / non_abc_folder
     if not (non_abc_dir / _CSV_ASSESSMENT).exists():
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
@@ -75,13 +76,14 @@ def _regenerate_one(run_dir: Path, sensitive_attribute: str) -> None:
     batch_type = str(row.get('batch_type', 'monthly'))
     alpha = float(all_assessment_df['alpha'].iloc[0])
     alpha_ema = _parse_alpha_ema(run_dir.name)
+    fairness_correction = str(row.get('fairness_correction', 'kamiran_rw'))
 
     is_non_abc = run_dir.name.startswith('baseline_non_abc')
     subfolder_override = os.path.join(sensitive_attribute, run_dir.name) if is_non_abc else None
 
     # For per-alpha (abcinml) folders, merge non-abc results so comparative charts include all baselines
     if not is_non_abc:
-        non_abc_assessment, non_abc_temporal, non_abc_absolute = _load_non_abc(run_dir, model_name, batch_type)
+        non_abc_assessment, non_abc_temporal, non_abc_absolute = _load_non_abc(run_dir, model_name, batch_type, fairness_correction)
         if not non_abc_assessment.empty:
             all_assessment_df = pd.concat([non_abc_assessment, all_assessment_df], ignore_index=True)
             all_temporal_df = pd.concat([non_abc_temporal, all_temporal_df], ignore_index=True)
@@ -107,6 +109,7 @@ def _regenerate_one(run_dir: Path, sensitive_attribute: str) -> None:
         forecasting_technique,
         batch_type,
         alpha_ema,
+        fairness_correction=fairness_correction,
         subfolder_override=subfolder_override,
     )
     plt.close('all')

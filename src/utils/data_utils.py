@@ -19,7 +19,7 @@ def _import_data():
                 'OBESIDADE',
                 'VACINA_COV', 'ANTIVIRAL', 'TP_ANTIVIR',
                 'UTI', 'SUPORT_VEN', 'RAIOX_RES', 
-                'TOMO_RES', 'CLASSI_FIN']
+                'TOMO_RES', 'CLASSI_FIN', 'SG_UF_NOT']
 
 
     for path in Path(r'src\data\SRAG\raw').iterdir():
@@ -110,6 +110,11 @@ def _convert_types(df: pd.DataFrame, window_column: str):
     return df
 
 
+def _filter_region(df, ):
+    df = df[df['SG_UF_NOT'].isin(['RS'])]
+    df.pop('SG_UF_NOT')
+    return df
+
 def pre_process_df(
     sensitive_attribute: str,
     window_column: str,
@@ -120,6 +125,9 @@ def pre_process_df(
     print('\t importing data...')
     df = _import_data()
 
+    print('\t filtering region-wise')
+    df = _filter_region(df)
+    
     print('\t filling NAs...')
     df = _fill_na(df)
     

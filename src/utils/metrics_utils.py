@@ -50,18 +50,26 @@ def _batch_to_datetime(labels: list, batch_type: str) -> pd.DatetimeIndex:
     return pd.to_datetime([f'{b}-01' for b in labels])
 
 
-def _run_folder_name(model_name, alpha, forecasting_technique, forecast_window, batch_type, alpha_ema):
+def _fairness_correction_suffix(fairness_correction):
+    # Default correction keeps the historical folder names untouched (no migration);
+    # any other correction (e.g. 'adaptative_rw') gets its own folder tree.
+    return '' if fairness_correction == 'kamiran_rw' else f'_{fairness_correction}'
+
+
+def _run_folder_name(model_name, alpha, forecasting_technique, forecast_window, batch_type, alpha_ema, fairness_correction='kamiran_rw'):
     ema_suffix = f'_ema_{alpha_ema}' if forecasting_technique == 'ema' else ''
+    fc_suffix = _fairness_correction_suffix(fairness_correction)
     alpha_str = str(int(alpha)) if float(alpha) == int(float(alpha)) else str(alpha)
-    return f'{model_name}_alpha_{alpha_str}_{forecasting_technique}_window_{forecast_window}_{batch_type}{ema_suffix}'
+    return f'{model_name}_alpha_{alpha_str}_{forecasting_technique}_window_{forecast_window}_{batch_type}{ema_suffix}{fc_suffix}'
 
 
-def baseline_non_abc_folder_name(model_name, batch_type):
-    return f'baseline_non_abc_{model_name}_{batch_type}'
+def baseline_non_abc_folder_name(model_name, batch_type, fairness_correction='kamiran_rw'):
+    fc_suffix = _fairness_correction_suffix(fairness_correction)
+    return f'baseline_non_abc_{model_name}_{batch_type}{fc_suffix}'
 
 
-def save_results(sensitive_attribute, all_assessment_df, all_temporal_df, all_absolute_df, model_name, alpha, forecast_window, forecasting_technique, batch_type, alpha_ema):
-    run_folder = _run_folder_name(model_name, alpha, forecasting_technique, forecast_window, batch_type, alpha_ema)
+def save_results(sensitive_attribute, all_assessment_df, all_temporal_df, all_absolute_df, model_name, alpha, forecast_window, forecasting_technique, batch_type, alpha_ema, fairness_correction='kamiran_rw'):
+    run_folder = _run_folder_name(model_name, alpha, forecasting_technique, forecast_window, batch_type, alpha_ema, fairness_correction)
     results_dir = os.path.join('src', 'results', sensitive_attribute, run_folder)
     os.makedirs(results_dir, exist_ok=True)
     all_assessment_df.to_csv(os.path.join(results_dir, 'assessment_all_baselines.csv'), index=False)
@@ -70,8 +78,8 @@ def save_results(sensitive_attribute, all_assessment_df, all_temporal_df, all_ab
     print(f'Results saved to {os.path.abspath(results_dir)}')
 
 
-def save_baseline_non_abc_results(sensitive_attribute, all_assessment_df, all_temporal_df, all_absolute_df, model_name, batch_type):
-    folder = baseline_non_abc_folder_name(model_name, batch_type)
+def save_baseline_non_abc_results(sensitive_attribute, all_assessment_df, all_temporal_df, all_absolute_df, model_name, batch_type, fairness_correction='kamiran_rw'):
+    folder = baseline_non_abc_folder_name(model_name, batch_type, fairness_correction)
     results_dir = os.path.join('src', 'results', sensitive_attribute, folder)
     os.makedirs(results_dir, exist_ok=True)
     all_assessment_df.to_csv(os.path.join(results_dir, 'assessment_all_baselines.csv'), index=False)
@@ -80,12 +88,12 @@ def save_baseline_non_abc_results(sensitive_attribute, all_assessment_df, all_te
     print(f'Non-ABC results saved to {os.path.abspath(results_dir)}')
 
 
-def generate_all_charts(baseline_type, baselines, alpha, sensitive_attribute, all_assessment_df, all_temporal_df, all_absolute_df, all_shap_records, model_name, forecast_window, forecasting_technique, batch_type, alpha_ema, subfolder_override=None):
+def generate_all_charts(baseline_type, baselines, alpha, sensitive_attribute, all_assessment_df, all_temporal_df, all_absolute_df, all_shap_records, model_name, forecast_window, forecasting_technique, batch_type, alpha_ema, fairness_correction='kamiran_rw', subfolder_override=None):
     chart_label = 'all' if baseline_type == 'all' else baseline_type
     if subfolder_override is not None:
         subfolder = subfolder_override
     else:
-        run_folder = _run_folder_name(model_name, alpha, forecasting_technique, forecast_window, batch_type, alpha_ema)
+        run_folder = _run_folder_name(model_name, alpha, forecasting_technique, forecast_window, batch_type, alpha_ema, fairness_correction)
         subfolder = os.path.join(sensitive_attribute, run_folder)
     _generate_performance_charts(all_assessment_df, all_temporal_df, baseline_type=chart_label, save=True, subfolder=subfolder, model_name=model_name, forecast_window=forecast_window, batch_type=batch_type)
     if model_name != 'xgboost':
