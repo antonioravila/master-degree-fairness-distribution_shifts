@@ -51,9 +51,10 @@ def _batch_to_datetime(labels: list, batch_type: str) -> pd.DatetimeIndex:
 
 
 def _fairness_correction_suffix(fairness_correction):
-    # Default correction keeps the historical folder names untouched (no migration);
-    # any other correction (e.g. 'adaptative_rw') gets its own folder tree.
-    return '' if fairness_correction == 'kamiran_rw' else f'_{fairness_correction}'
+    # Every run folder carries its fairness-correction token so 'kamiran_rw' and
+    # 'adaptative_rw' never share a folder. The APR fairness measure is NOT part
+    # of the folder name (recorded in the CSVs only).
+    return f'_{fairness_correction}'
 
 
 def _run_folder_name(model_name, alpha, forecasting_technique, forecast_window, batch_type, alpha_ema, fairness_correction='kamiran_rw'):

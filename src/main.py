@@ -189,7 +189,7 @@ def run_baseline(
     return assessment_metrics, temporal_metrics, shap_records, absolute_rates
 
 
-def _attach_metadata(dfs, model_name, forecast_window, forecasting_technique, batch_type, alpha_ema, fairness_correction):
+def _attach_metadata(dfs, model_name, forecast_window, forecasting_technique, batch_type, alpha_ema, fairness_correction, apr_fairness_measure):
     for df in dfs:
         df['model_name'] = model_name
         df['forecast_window'] = forecast_window
@@ -197,6 +197,8 @@ def _attach_metadata(dfs, model_name, forecast_window, forecasting_technique, ba
         df['batch_type'] = batch_type
         df['alpha_ema'] = alpha_ema
         df['fairness_correction'] = fairness_correction
+        # APR-only knob — blank for non-APR runs so the column is unambiguous.
+        df['apr_fairness_measure'] = apr_fairness_measure if fairness_correction == 'adaptative_rw' else ''
 
 
 def main():
@@ -272,7 +274,7 @@ def main():
                 _attach_metadata(
                     (assessment_metrics, temporal_metrics, absolute_rates),
                     model_name, forecast_window, forecasting_technique, batch_type, alpha_ema,
-                    fairness_correction,
+                    fairness_correction, apr_fairness_measure,
                 )
 
                 non_abc_assessment_df = pd.concat([non_abc_assessment_df, assessment_metrics], ignore_index=True)
@@ -331,7 +333,7 @@ def main():
             _attach_metadata(
                 (assessment_metrics, temporal_metrics, absolute_rates),
                 model_name, forecast_window, forecasting_technique, batch_type, alpha_ema,
-                fairness_correction,
+                fairness_correction, apr_fairness_measure,
             )
 
             metrics_utils.save_results(

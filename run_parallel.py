@@ -2,6 +2,7 @@ import subprocess
 import concurrent.futures
 import argparse
 import sys
+import threading
 from datetime import datetime
 from pathlib import Path
 
@@ -10,6 +11,12 @@ TECHNIQUES_WITH_WINDOW = ['sma']
 TECHNIQUES_NO_WINDOW = ['ema', 'oracle']
 WINDOWS = [3, 5, 10]
 BATCH_TYPES = ['monthly', 'weekly']
+
+# Fairness-correction axis. 'kamiran_rw' is Kamiran & Calders reweighing;
+# 'adaptative_rw' is APR (Hu et al.). Each writes to its own folder (…_kamiran_rw /
+# …_adaptative_rw). APR uses main.py's default fairness measure (demographic
+# parity) — the measure is recorded in the CSVs, not the folder name.
+FAIRNESS_CORRECTIONS = ['kamiran_rw', 'adaptative_rw']
 
 # Must match general_utils.py defaults
 ALPHAS = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]
@@ -23,6 +30,10 @@ RESULTS_BASE = Path('src/results')
 # For RTX Blackwell 8 GB: --max_xgb_workers 2 --max_lr_workers 4
 DEFAULT_XGB_WORKERS = 1
 DEFAULT_LR_WORKERS = 2
+# APR retrains T times per fit (default T=20), so an APR job is ~20x a kamiran one.
+# This caps APR jobs running at once *across both model pools* (a shared gate on
+# top of the LR/XGB pools), independent of --max_lr_workers / --max_xgb_workers.
+DEFAULT_APR_WORKERS = 1
 
 
 def _fmt_alpha(alpha):
@@ -31,15 +42,22 @@ def _fmt_alpha(alpha):
     return int(f) if f == int(f) else f
 
 
-def _run_folder_name(model, alpha, technique, window, batch_type):
+def _fairness_correction_suffix(fairness_correction):
+    """Mirror of metrics_utils._fairness_correction_suffix — keep in sync."""
+    return f'_{fairness_correction}'
+
+
+def _run_folder_name(model, alpha, technique, window, batch_type, fairness_correction='kamiran_rw'):
+    """Mirror of metrics_utils._run_folder_name — keep in sync."""
     ema_suffix = f'_ema_{DEFAULT_ALPHA_EMA}' if technique == 'ema' else ''
-    return f'{model}_alpha_{_fmt_alpha(alpha)}_{technique}_window_{window}_{batch_type}{ema_suffix}'
+    fc_suffix = _fairness_correction_suffix(fairness_correction)
+    return f'{model}_alpha_{_fmt_alpha(alpha)}_{technique}_window_{window}_{batch_type}{ema_suffix}{fc_suffix}'
 
 
-def _folder_exists(results_dir, model, alpha, technique, window, batch_type):
+def _folder_exists(results_dir, model, alpha, technique, window, batch_type, fairness_correction):
     """Check both alpha_1 and alpha_1.0 formats for backward compat with existing results."""
-    primary = results_dir / _run_folder_name(model, alpha, technique, window, batch_type)
-    alt = results_dir / _run_folder_name(model, float(alpha), technique, window, batch_type)
+    primary = results_dir / _run_folder_name(model, alpha, technique, window, batch_type, fairness_correction)
+    alt = results_dir / _run_folder_name(model, float(alpha), technique, window, batch_type, fairness_correction)
     return primary.exists() or alt.exists()
 
 
@@ -48,7 +66,8 @@ def _missing_alphas(entry):
     return [
         alpha for alpha in ALPHAS
         if not _folder_exists(
-            results_dir, entry['model'], alpha, entry['technique'], entry['window'], entry['batch_type']
+            results_dir, entry['model'], alpha, entry['technique'], entry['window'],
+            entry['batch_type'], entry['fairness_correction'],
         )
     ]
 
@@ -83,63 +102,75 @@ def resolve_jobs(scenarios):
     return jobs, n_complete
 
 
-def build_commands():
+def _scenario_cmd(model, technique, batch_type, window, with_window):
+    cmd = [
+        'uv', 'run', 'src/main.py',
+        '--model_name', model,
+        '--forecasting_technique', technique,
+        '--batch_type', batch_type,
+    ]
+    if with_window:
+        cmd += ['--forecast_window', str(window)]
+    return cmd
+
+
+def build_commands(fairness_corrections):
     commands = []
+
+    def _add(model, technique, window, batch_type, with_window):
+        base_label = (
+            f'{model} | {technique} | window={window} | {batch_type}'
+            if with_window else f'{model} | {technique} | {batch_type}'
+        )
+        base_cmd = _scenario_cmd(model, technique, batch_type, window, with_window)
+        for fc in fairness_corrections:
+            commands.append({
+                'model': model,
+                'technique': technique,
+                'window': window,
+                'batch_type': batch_type,
+                'fairness_correction': fc,
+                'label': f'{base_label} | fc={fc}',
+                'cmd': base_cmd + ['--fairness_correction', fc],
+            })
+
     for model in MODELS:
         for technique in TECHNIQUES_WITH_WINDOW:
             for window in WINDOWS:
                 for batch_type in BATCH_TYPES:
-                    commands.append({
-                        'model': model,
-                        'technique': technique,
-                        'window': window,
-                        'batch_type': batch_type,
-                        'label': f'{model} | {technique} | window={window} | {batch_type}',
-                        'cmd': [
-                            'uv', 'run', 'src/main.py',
-                            '--model_name', model,
-                            '--forecasting_technique', technique,
-                            '--forecast_window', str(window),
-                            '--batch_type', batch_type,
-                        ],
-                    })
+                    _add(model, technique, window, batch_type, with_window=True)
         for technique in TECHNIQUES_NO_WINDOW:
             for batch_type in BATCH_TYPES:
-                commands.append({
-                    'model': model,
-                    'technique': technique,
-                    'window': DEFAULT_FORECAST_WINDOW,
-                    'batch_type': batch_type,
-                    'label': f'{model} | {technique} | {batch_type}',
-                    'cmd': [
-                        'uv', 'run', 'src/main.py',
-                        '--model_name', model,
-                        '--forecasting_technique', technique,
-                        '--batch_type', batch_type,
-                    ],
-                })
+                _add(model, technique, DEFAULT_FORECAST_WINDOW, batch_type, with_window=False)
     return commands
 
 
-def run_command(entry, log_dir: Path):
+def run_command(entry, log_dir: Path, apr_gate: threading.Semaphore):
     label = entry['label']
     log_path = log_dir / (label.replace(' | ', '_').replace('=', '').replace('.', '') + '.log')
 
-    print(f'[{_now()}] START  {label}')
-    start = datetime.now()
+    is_apr = entry.get('fairness_correction') == 'adaptative_rw'
+    if is_apr:
+        apr_gate.acquire()
+    try:
+        print(f'[{_now()}] START  {label}')
+        start = datetime.now()
 
-    with open(log_path, 'w') as log_file:
-        result = subprocess.run(
-            entry['cmd'],
-            stdout=log_file,
-            stderr=subprocess.STDOUT,
-            text=True,
-        )
+        with open(log_path, 'w') as log_file:
+            result = subprocess.run(
+                entry['cmd'],
+                stdout=log_file,
+                stderr=subprocess.STDOUT,
+                text=True,
+            )
 
-    elapsed = int((datetime.now() - start).total_seconds())
-    status = 'DONE ' if result.returncode == 0 else 'FAILED'
-    print(f'[{_now()}] {status} {label} ({elapsed}s) — log: {log_path}')
-    return result.returncode
+        elapsed = int((datetime.now() - start).total_seconds())
+        status = 'DONE ' if result.returncode == 0 else 'FAILED'
+        print(f'[{_now()}] {status} {label} ({elapsed}s) — log: {log_path}')
+        return result.returncode
+    finally:
+        if is_apr:
+            apr_gate.release()
 
 
 def _now():
@@ -158,12 +189,23 @@ def main():
         '--max_lr_workers', type=int, default=DEFAULT_LR_WORKERS,
         help=f'Max parallel logistic regression jobs (CPU-bound). Default: {DEFAULT_LR_WORKERS}.',
     )
+    parser.add_argument(
+        '--max_apr_workers', type=int, default=DEFAULT_APR_WORKERS,
+        help=(
+            f'Max APR (adaptative_rw) jobs running at once, across both model pools. '
+            f'Default: {DEFAULT_APR_WORKERS}. APR retrains ~20x per fit, so keep this low.'
+        ),
+    )
+    parser.add_argument(
+        '--fairness_corrections', nargs='+', default=FAIRNESS_CORRECTIONS, choices=FAIRNESS_CORRECTIONS,
+        help=f'Which fairness corrections to run. Default: {" ".join(FAIRNESS_CORRECTIONS)}.',
+    )
     args = parser.parse_args()
 
     log_dir = Path('logs')
     log_dir.mkdir(exist_ok=True)
 
-    scenarios = build_commands()
+    scenarios = build_commands(args.fairness_corrections)
     jobs, n_complete = resolve_jobs(scenarios)
 
     if n_complete:
@@ -172,13 +214,21 @@ def main():
         print('All scenarios complete. Nothing to run.')
         return
 
+    # Submit kamiran jobs before APR jobs so short kamiran runs are not stuck
+    # behind APR jobs waiting on the APR gate.
+    jobs.sort(key=lambda j: j['fairness_correction'] == 'adaptative_rw')
+
+    apr_gate = threading.Semaphore(max(1, args.max_apr_workers))
+
     xgb_jobs = [j for j in jobs if j['model'] == 'xgboost']
     lr_jobs = [j for j in jobs if j['model'] == 'logistic_regression']
+    n_apr = sum(1 for j in jobs if j['fairness_correction'] == 'adaptative_rw')
 
     print(
         f'Launching {len(lr_jobs)} LR jobs (max_workers={args.max_lr_workers}) '
         f'and {len(xgb_jobs)} XGBoost jobs (max_workers={args.max_xgb_workers}) '
-        f'in parallel pools. Logs → {log_dir}/\n'
+        f'in parallel pools; {n_apr} of them are APR, gated to {args.max_apr_workers} at a time. '
+        f'Logs → {log_dir}/\n'
     )
 
     futures = []
@@ -187,9 +237,9 @@ def main():
         concurrent.futures.ThreadPoolExecutor(max_workers=args.max_xgb_workers) as xgb_pool,
     ):
         for job in lr_jobs:
-            futures.append(lr_pool.submit(run_command, job, log_dir))
+            futures.append(lr_pool.submit(run_command, job, log_dir, apr_gate))
         for job in xgb_jobs:
-            futures.append(xgb_pool.submit(run_command, job, log_dir))
+            futures.append(xgb_pool.submit(run_command, job, log_dir, apr_gate))
 
         results = [f.result() for f in concurrent.futures.as_completed(futures)]
 
