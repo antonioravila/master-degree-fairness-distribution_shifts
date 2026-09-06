@@ -31,9 +31,9 @@ from utils.metrics_utils import (
 )
 
 _FAIRNESS_METRICS = [
-    ('sp', 'Demographic Parity Diff.'),
-    ('tpr', 'TPR Difference'),
-    ('fpr', 'FPR Difference'),
+    ('dp', 'Demographic Parity Diff.'),
+    ('tpr_diff', 'TPR Difference'),
+    ('fpr_diff', 'FPR Difference'),
 ]
 
 _PERIOD_LABELS_EN = {

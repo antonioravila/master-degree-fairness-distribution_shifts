@@ -120,9 +120,9 @@ def initialize_variables(df, window_column, alpha_ema=0.5):
         {
             'acc': [],
             'auc': [],
-            'sp': [],
-            'tpr': [],
-            'fpr': [],
+            'dp': [],
+            'tpr_diff': [],
+            'fpr_diff': [],
             'batch': [],
             'alpha': [],
         }

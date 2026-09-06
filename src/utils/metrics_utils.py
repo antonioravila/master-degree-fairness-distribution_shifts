@@ -13,9 +13,9 @@ from fairlearn.metrics import (
 _SNAPSHOT_METRICS = [
     ('acc', 'Accuracy'),
     ('auc', 'AUC-ROC'),
-    ('sp', 'Demographic Parity Diff.'),
-    ('tpr', 'TPR Difference'),
-    ('fpr', 'FPR Difference'),
+    ('dp', 'Demographic Parity Diff.'),
+    ('tpr_diff', 'TPR Difference'),
+    ('fpr_diff', 'FPR Difference'),
 ]
 
 _FIGURES_DIR = os.path.join(os.path.dirname(__file__), '..', 'figures')
@@ -235,9 +235,9 @@ def _generate_performance_charts(
 def compute_temporal_metrics(
     assessment_metrics: pd.DataFrame, alpha: float
 ) -> pd.DataFrame:
-    mb = assessment_metrics['sp'].abs().max()
-    ts = assessment_metrics['sp'].diff().abs().mean()
-    mbd = assessment_metrics['sp'].diff().abs().max()
+    mb = assessment_metrics['dp'].abs().max()
+    ts = assessment_metrics['dp'].diff().abs().mean()
+    mbd = assessment_metrics['dp'].diff().abs().max()
 
     temporal_metrics = pd.DataFrame(
         {
@@ -269,7 +269,7 @@ def compute_snapshot_metrics(
 
     acc = accuracy_score(y_test, y_pred)
     auc = roc_auc_score(y_test, y_pred_proba[:, 1])
-    sp_diff = demographic_parity_difference(
+    dp_diff = demographic_parity_difference(
         y_true=y_test, y_pred=y_pred, sensitive_features=sensitive_features
     )
     tpr_diff = true_positive_rate_difference(
@@ -279,7 +279,7 @@ def compute_snapshot_metrics(
         y_true=y_test, y_pred=y_pred, sensitive_features=sensitive_features
     )
 
-    return acc, auc, sp_diff, tpr_diff, fpr_diff, tpr_S0, fpr_S0, tpr_S1, fpr_S1
+    return acc, auc, dp_diff, tpr_diff, fpr_diff, tpr_S0, fpr_S0, tpr_S1, fpr_S1
 
 
 def compute_shap_values(model_name, model, X_test: pd.DataFrame) -> dict:
@@ -366,7 +366,7 @@ def _generate_comparative_chart(
             period_handles = handles
 
         # Fairness reference lines
-        is_fairness = col in ('sp', 'tpr', 'fpr')
+        is_fairness = col in ('dp', 'tpr_diff', 'fpr_diff')
         if is_fairness:
             ax.axhline(y=0, color='black', linestyle='--', linewidth=1.0, alpha=0.5, zorder=2)
 

@@ -20,9 +20,9 @@ _DEFAULT_OUTPUT = os.path.join(os.path.dirname(__file__), 'alpha_analysis.png')
 _METRICS = {
     'acc': 'Accuracy',
     'auc': 'AUC',
-    'sp': 'Dem. Parity Diff.',
-    'tpr': 'TPR Difference',
-    'fpr': 'FPR Difference',
+    'dp': 'Dem. Parity Diff.',
+    'tpr_diff': 'TPR Difference',
+    'fpr_diff': 'FPR Difference',
 }
 
 _STAT_LABELS = {

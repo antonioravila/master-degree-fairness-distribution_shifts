@@ -40,6 +40,32 @@ def run_baseline(
     print(f'(1) running with alpha: {alpha}')
 
     accumulated_train_df = pd.DataFrame()
+    vanilla_static_model_trained = False
+
+    def _fit(X_tr, y_tr):
+        return model_utils.fit_fair_model(
+            X_tr,
+            y_tr,
+            sensitive_attribute,
+            target_label,
+            model_name,
+            baseline_type,
+            fairness_correction,
+            _MAX_ITER,
+            alpha=alpha,
+            forecasted_distributions=forecasted_distributions,
+            apr_iterations=apr_iterations,
+            apr_eta=apr_eta,
+            apr_subgroup_alpha=apr_subgroup_alpha,
+            apr_decision_boundary=apr_decision_boundary,
+            apr_fairness_measure=apr_fairness_measure,
+        )
+
+    def _accumulate():
+        nonlocal accumulated_train_df
+        accumulated_train_df = pd.concat([accumulated_train_df, current_batch_df], ignore_index=True)
+        for key in historical_proportions:
+            historical_proportions[key].append(current_proportions[key])
 
     for i in range(len(batches)):
         batch = batches[i]
@@ -52,135 +78,95 @@ def run_baseline(
             current_batch_df, sensitive_attribute, target_label
         )
 
+        # Warm-up: skip the first `forecast_window_batches` batches for EVERY
+        # baseline. abcinml needs this much history before it can forecast; the
+        # other three skip the same window so all four are trained and evaluated
+        # over the identical batch range. `needs_history` covers the degenerate
+        # forecast_window_batches == 0 case for the accumulating baselines.
+        in_warmup = i < forecast_window_batches
+        needs_history = baseline_type in ['dynamic', 'abcinml'] and accumulated_train_df.empty
+        if in_warmup or needs_history:
+            _accumulate()
+            continue
+
+        X_test = current_batch_df.drop(columns=[target_label, window_column])
+        y_test = current_batch_df[target_label]
+
         if baseline_type in ['vanilla', 'static']:
-            X_train, y_train, X_test, y_test = model_utils._get_train_and_test(
-                df=current_batch_df,
-                baseline_type=baseline_type,
-                window_column=window_column,
-                target_label=target_label,
-                batches=batches,
-                i=i,
-            )
-
-            if X_train is not None:
+            # Train once, on the first post-warm-up batch (the reference batch);
+            # never retrained.
+            if not vanilla_static_model_trained:
                 print(f'(1.1.3) training {model_name} model')
+                model, sample_weights = _fit(X_test, y_test)
+                vanilla_static_model_trained = True
+        else:  # dynamic, abcinml — retrain each batch on all prior batches
+            X_train = accumulated_train_df.drop(columns=[target_label, window_column])
+            y_train = accumulated_train_df[target_label]
 
-                model, sample_weights = model_utils.fit_fair_model(
-                    X_train,
-                    y_train,
-                    sensitive_attribute,
-                    target_label,
-                    model_name,
-                    baseline_type,
-                    fairness_correction,
-                    _MAX_ITER,
-                    alpha=alpha,
-                    forecasted_distributions=forecasted_distributions,
-                    apr_iterations=apr_iterations,
-                    apr_eta=apr_eta,
-                    apr_subgroup_alpha=apr_subgroup_alpha,
-                    apr_decision_boundary=apr_decision_boundary,
-                    apr_fairness_measure=apr_fairness_measure,
-                )
+            if baseline_type == 'abcinml':
+                if forecasting_technique == 'oracle':
+                    forecasted_distributions = model_utils.forecast_joint_distributions_oracle(
+                        df=df,
+                        batches=batches,
+                        i=i,
+                        window_column=window_column,
+                        sensitive_attribute=sensitive_attribute,
+                        target_label=target_label,
+                        historical_proportions=historical_proportions,
+                        window=forecast_window_batches,
+                        alpha_ema=alpha_ema,
+                    )
+                else:
+                    forecasted_distributions = model_utils.forecast_joint_distributions(
+                        historical_proportions,
+                        window=forecast_window_batches,
+                        forecasting_technique=forecasting_technique,
+                        alpha_ema=alpha_ema,
+                    )
+                if forecasted_distributions is None:
+                    _accumulate()
+                    continue
 
-        if baseline_type in ['dynamic', 'abcinml']:
-            if i == 0:
-                X_train, y_train, X_test, y_test = None, None, None, None
-            else:
-                X_train = accumulated_train_df.drop(columns=[target_label, window_column])
-                y_train = accumulated_train_df[target_label]
-                X_test = current_batch_df.drop(columns=[target_label, window_column])
-                y_test = current_batch_df[target_label]
+            print(f'(1.1.3) training {model_name} model')
+            model, sample_weights = _fit(X_train, y_train)
 
-            if X_train is not None:
-                if baseline_type == 'abcinml':
-                    if forecasting_technique == 'oracle':
-                        forecasted_distributions = model_utils.forecast_joint_distributions_oracle(
-                            df=df,
-                            batches=batches,
-                            i=i,
-                            window_column=window_column,
-                            sensitive_attribute=sensitive_attribute,
-                            target_label=target_label,
-                            historical_proportions=historical_proportions,
-                            window=forecast_window_batches,
-                            alpha_ema=alpha_ema,
-                        )
-                    else:
-                        forecasted_distributions = model_utils.forecast_joint_distributions(
-                            historical_proportions,
-                            window=forecast_window_batches,
-                            forecasting_technique=forecasting_technique,
-                            alpha_ema=alpha_ema,
-                        )
-                    if forecasted_distributions is None:
-                        for key in historical_proportions:
-                            historical_proportions[key].append(current_proportions[key])
-                        accumulated_train_df = pd.concat([accumulated_train_df, current_batch_df], ignore_index=True)
-                        continue
+        y_pred = model.predict(X_test)
+        y_pred_proba = model.predict_proba(X_test)
 
-                print(f'(1.1.3) training {model_name} model')
-                model, sample_weights = model_utils.fit_fair_model(
-                    X_train,
-                    y_train,
-                    sensitive_attribute,
-                    target_label,
-                    model_name,
-                    baseline_type,
-                    fairness_correction,
-                    _MAX_ITER,
-                    alpha=alpha,
-                    forecasted_distributions=forecasted_distributions,
-                    apr_iterations=apr_iterations,
-                    apr_eta=apr_eta,
-                    apr_subgroup_alpha=apr_subgroup_alpha,
-                    apr_decision_boundary=apr_decision_boundary,
-                    apr_fairness_measure=apr_fairness_measure,
-                )
+        sf_test = X_test[sensitive_attribute]
 
-        should_test = X_test is not None and i >= forecast_window_batches
-
-        if should_test:
-            y_pred = model.predict(X_test)
-            y_pred_proba = model.predict_proba(X_test)
-
-            sf_test = X_test[sensitive_attribute]
-
-            print(f'(1.1.4) testing {model_name} model')
-            acc, auc, sp, tpr_diff, fpr_diff, tpr_S0, fpr_S0, tpr_S1, fpr_S1 = (
-                metrics_utils.compute_snapshot_metrics(
-                    y_test, y_pred, y_pred_proba, sf_test
-                )
+        print(f'(1.1.4) testing {model_name} model')
+        acc, auc, dp, tpr_diff, fpr_diff, tpr_S0, fpr_S0, tpr_S1, fpr_S1 = (
+            metrics_utils.compute_snapshot_metrics(
+                y_test, y_pred, y_pred_proba, sf_test
             )
+        )
 
-            assessment_metrics.loc[len(assessment_metrics)] = [
-                acc,
-                auc,
-                sp,
-                tpr_diff,
-                fpr_diff,
-                batch,
-                alpha,
-            ]
+        assessment_metrics.loc[len(assessment_metrics)] = [
+            acc,
+            auc,
+            dp,
+            tpr_diff,
+            fpr_diff,
+            batch,
+            alpha,
+        ]
 
-            absolute_rates.loc[len(absolute_rates)] = [
-                batch,
-                alpha,
-                tpr_S0,
-                fpr_S0,
-                tpr_S1,
-                fpr_S1,
-            ]
+        absolute_rates.loc[len(absolute_rates)] = [
+            batch,
+            alpha,
+            tpr_S0,
+            fpr_S0,
+            tpr_S1,
+            fpr_S1,
+        ]
 
-            shap_record = metrics_utils.compute_shap_values(model_name, model, X_test)
-            shap_record['batch'] = str(batch)
-            shap_record['alpha'] = alpha
-            shap_records.append(shap_record)
+        shap_record = metrics_utils.compute_shap_values(model_name, model, X_test)
+        shap_record['batch'] = str(batch)
+        shap_record['alpha'] = alpha
+        shap_records.append(shap_record)
 
-        accumulated_train_df = pd.concat([accumulated_train_df, current_batch_df], ignore_index=True)
-
-        for key in historical_proportions:
-            historical_proportions[key].append(current_proportions[key])
+        _accumulate()
 
     temporal_metrics = metrics_utils.compute_temporal_metrics(assessment_metrics, alpha)
 

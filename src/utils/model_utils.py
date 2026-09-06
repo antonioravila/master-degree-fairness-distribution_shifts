@@ -611,37 +611,3 @@ def fit_fair_model(
     model = initialize_model(model_name, MAX_ITER=max_iter)
     model.fit(X_train, y_train, sample_weight=sample_weights)
     return model, sample_weights
-
-
-def _get_train_and_test(
-    df: pd.DataFrame,
-    baseline_type: str,
-    window_column: str,
-    target_label: str,
-    batches: pd.Series,
-    i: int,
-):
-    if baseline_type in ['dynamic', 'abcinml']:
-        prior_batches = batches[0:i]
-        if len(prior_batches) == 0:
-            return None, None, None, None
-
-        train_df = df[df[window_column].isin(prior_batches)]
-        test_df = df[df[window_column] == batches[i]]
-
-        X_train = train_df.drop(columns=[target_label, window_column])
-        y_train = train_df[target_label]
-        X_test = test_df.drop(columns=[target_label, window_column])
-        y_test = test_df[target_label]
-
-        return X_train, y_train, X_test, y_test
-
-    # vanilla, static: batch 0 → only train; batch i≥1 → only test
-    if i == 0:
-        X_train = df.drop(columns=[target_label, window_column])
-        y_train = df[target_label]
-        return X_train, y_train, None, None
-
-    X_test = df.drop(columns=[target_label, window_column])
-    y_test = df[target_label]
-    return None, None, X_test, y_test
