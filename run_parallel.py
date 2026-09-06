@@ -95,7 +95,7 @@ def resolve_jobs(scenarios):
             for alpha in missing:
                 jobs.append({
                     **entry,
-                    'label': f'{entry["label"]} | α={alpha}',
+                    'label': f'{entry["label"]} | alpha={alpha}',
                     'cmd': entry['cmd'] + ['--alpha', str(alpha)],
                 })
 
@@ -147,7 +147,7 @@ def build_commands(fairness_corrections):
 
 def run_command(entry, log_dir: Path, apr_gate: threading.Semaphore):
     label = entry['label']
-    log_path = log_dir / (label.replace(' | ', '_').replace('=', '').replace('.', '') + '.log')
+    log_path = log_dir / (label.replace(' | ', '_').replace('=', '-').replace(' ', '') + '.log')
 
     is_apr = entry.get('fairness_correction') == 'adaptative_rw'
     if is_apr:
