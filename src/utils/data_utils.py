@@ -1,5 +1,9 @@
+import hashlib
+import inspect
 import pandas as pd
 from pathlib import Path
+
+_CACHE_DIR = Path(__file__).parent.parent / 'data' / 'SRAG' / 'cache'
 
 
 def _import_data():
@@ -110,30 +114,71 @@ def _convert_types(df: pd.DataFrame, window_column: str):
     return df
 
 
+def _downcast_dtypes(df: pd.DataFrame, window_column: str) -> pd.DataFrame:
+    """Shrink dtypes in place: every engineered column here is either a 0/1
+    flag (binary_cols, the one-hot dummies, EVOLUCAO/CS_RACA/IDADE_BIN) or a
+    normalized-to-[0,1] float (NU_IDADE_N, when it isn't dropped). int8/float32
+    represent both exactly — this is a memory optimization only, not a
+    behavior change (sklearn/xgboost upcast internally as needed regardless
+    of the input dtype). window_column (period[M] or the YEAR-WEEK string) is
+    left untouched.
+    """
+    for col in df.columns:
+        if col == window_column:
+            continue
+        if pd.api.types.is_float_dtype(df[col]):
+            df[col] = df[col].astype('float32')
+        elif pd.api.types.is_integer_dtype(df[col]):
+            df[col] = df[col].astype('int8')
+    return df
+
+
 def _filter_region(df, ):
     df = df[df['SG_UF_NOT'].isin(['RS'])]
     df.pop('SG_UF_NOT')
     return df
 
+
+def _preprocessing_fingerprint() -> str:
+    """Hash of the source of every function pre_process_df calls, so the disk
+    cache below is invalidated automatically whenever preprocessing logic
+    changes (e.g. toggling _filter_region back to RS-only) — no manual cache
+    version bump needed.
+    """
+    src = ''.join(
+        inspect.getsource(fn)
+        for fn in (_import_data, _filter_region, _fill_na, _convert_types, _downcast_dtypes)
+    )
+    return hashlib.md5(src.encode()).hexdigest()[:10]
+
+
 def pre_process_df(
     sensitive_attribute: str,
     window_column: str,
+    use_cache: bool = True,
 ) -> pd.DataFrame:
 
     print('0) starting data pre-process')
+
+    cache_path = _CACHE_DIR / f'{sensitive_attribute}_{window_column.replace("-", "")}_{_preprocessing_fingerprint()}.parquet'
+    if use_cache and cache_path.exists():
+        print(f'\t loading cached preprocessed data from {cache_path.name}')
+        df = pd.read_parquet(cache_path)
+        print('\t finished data pre-process (cache hit)')
+        return df
 
     print('\t importing data...')
     df = _import_data()
 
     print('\t filtering region-wise')
     df = _filter_region(df)
-    
+
     print('\t filling NAs...')
     df = _fill_na(df)
-    
+
     print('\t converting types...')
     df = _convert_types(df, window_column)
-    
+
     df.sort_values(by=window_column, ascending=True, inplace=True)
 
     # Drop correlated column to prevent leakage or redundancy
@@ -149,10 +194,17 @@ def pre_process_df(
     elif window_column == 'YEAR-MONTH':
         df = df[
             df[window_column].between(
-                pd.Period('2019-01', freq='M'), 
+                pd.Period('2019-01', freq='M'),
                 pd.Period('2026-02', freq='M')
             )
         ]
+
+    df = _downcast_dtypes(df, window_column)
+
+    if use_cache:
+        _CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        df.to_parquet(cache_path, index=False)
+        print(f'\t cached preprocessed data to {cache_path.name}')
 
     print('\t finished data pre-process')
 

@@ -142,7 +142,6 @@ def initialize_variables(df, window_column, alpha_ema=0.5):
     model = None
     sample_weights = None
     forecasted_distributions = None
-    shap_records = []
 
     return (
         batches,
@@ -151,6 +150,5 @@ def initialize_variables(df, window_column, alpha_ema=0.5):
         model,
         sample_weights,
         forecasted_distributions,
-        shap_records,
         absolute_rates,
     )

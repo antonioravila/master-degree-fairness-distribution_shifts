@@ -1,6 +1,5 @@
 """
 Regenerates all charts from saved CSV results without re-running the experiment.
-SHAP charts are skipped — SHAP values are not persisted to disk.
 
 Usage:
     # single run folder
@@ -103,7 +102,6 @@ def _regenerate_one(run_dir: Path, sensitive_attribute: str) -> None:
         all_assessment_df,
         all_temporal_df,
         all_absolute_df,
-        [],  # SHAP values not persisted; shap_summary.png will be skipped
         model_name,
         forecast_window,
         forecasting_technique,

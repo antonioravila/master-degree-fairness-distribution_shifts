@@ -33,7 +33,6 @@ def run_baseline(
         model,
         sample_weights,
         forecasted_distributions,
-        shap_records,
         absolute_rates,
     ) = general_utils.initialize_variables(df, window_column)
 
@@ -161,18 +160,13 @@ def run_baseline(
             fpr_S1,
         ]
 
-        shap_record = metrics_utils.compute_shap_values(model_name, model, X_test)
-        shap_record['batch'] = str(batch)
-        shap_record['alpha'] = alpha
-        shap_records.append(shap_record)
-
         _accumulate()
 
     temporal_metrics = metrics_utils.compute_temporal_metrics(assessment_metrics, alpha)
 
     print('\n')
 
-    return assessment_metrics, temporal_metrics, shap_records, absolute_rates
+    return assessment_metrics, temporal_metrics, absolute_rates
 
 
 def _attach_metadata(dfs, model_name, forecast_window, forecasting_technique, batch_type, alpha_ema, fairness_correction, apr_fairness_measure):
@@ -219,7 +213,6 @@ def main():
     non_abc_assessment_df = pd.DataFrame()
     non_abc_temporal_df = pd.DataFrame()
     non_abc_absolute_df = pd.DataFrame()
-    non_abc_shap_records = []
 
     if non_abc_to_run:
         non_abc_folder = metrics_utils.baseline_non_abc_folder_name(model_name, batch_type, fairness_correction)
@@ -236,7 +229,7 @@ def main():
             for bt in non_abc_to_run:
                 print(f'--- Running baseline: {bt} (alpha-independent) ---\n')
 
-                assessment_metrics, temporal_metrics, shap_records_bt, absolute_rates = run_baseline(
+                assessment_metrics, temporal_metrics, absolute_rates = run_baseline(
                     df=df,
                     window_column=window_column,
                     sensitive_attribute=sensitive_attribute,
@@ -266,7 +259,6 @@ def main():
                 non_abc_assessment_df = pd.concat([non_abc_assessment_df, assessment_metrics], ignore_index=True)
                 non_abc_temporal_df = pd.concat([non_abc_temporal_df, temporal_metrics], ignore_index=True)
                 non_abc_absolute_df = pd.concat([non_abc_absolute_df, absolute_rates], ignore_index=True)
-                non_abc_shap_records.extend(shap_records_bt)
 
             metrics_utils.save_baseline_non_abc_results(
                 sensitive_attribute, non_abc_assessment_df, non_abc_temporal_df, non_abc_absolute_df,
@@ -280,7 +272,6 @@ def main():
                 all_assessment_df=non_abc_assessment_df,
                 all_temporal_df=non_abc_temporal_df,
                 all_absolute_df=non_abc_absolute_df,
-                all_shap_records=non_abc_shap_records,
                 model_name=model_name,
                 forecast_window=forecast_window,
                 forecasting_technique=forecasting_technique,
@@ -295,7 +286,7 @@ def main():
         for alpha in alphas:
             print(f'--- Running baseline: abcinml, alpha: {alpha} ---\n')
 
-            assessment_metrics, temporal_metrics, shap_records_alpha, absolute_rates = run_baseline(
+            assessment_metrics, temporal_metrics, absolute_rates = run_baseline(
                 df=df,
                 window_column=window_column,
                 sensitive_attribute=sensitive_attribute,
@@ -335,7 +326,6 @@ def main():
             combined_assessment = pd.concat([non_abc_assessment_df, assessment_metrics], ignore_index=True)
             combined_temporal = pd.concat([non_abc_temporal_df, temporal_metrics], ignore_index=True)
             combined_absolute = pd.concat([non_abc_absolute_df, absolute_rates], ignore_index=True)
-            combined_shap = non_abc_shap_records + shap_records_alpha
 
             metrics_utils.generate_all_charts(
                 baseline_type=baseline_type,
@@ -345,7 +335,6 @@ def main():
                 all_assessment_df=combined_assessment,
                 all_temporal_df=combined_temporal,
                 all_absolute_df=combined_absolute,
-                all_shap_records=combined_shap,
                 model_name=model_name,
                 forecast_window=forecast_window,
                 forecasting_technique=forecasting_technique,

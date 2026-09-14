@@ -1,5 +1,4 @@
 import os
-import shap
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -89,7 +88,7 @@ def save_baseline_non_abc_results(sensitive_attribute, all_assessment_df, all_te
     print(f'Non-ABC results saved to {os.path.abspath(results_dir)}')
 
 
-def generate_all_charts(baseline_type, baselines, alpha, sensitive_attribute, all_assessment_df, all_temporal_df, all_absolute_df, all_shap_records, model_name, forecast_window, forecasting_technique, batch_type, alpha_ema, fairness_correction='kamiran_rw', subfolder_override=None):
+def generate_all_charts(baseline_type, baselines, alpha, sensitive_attribute, all_assessment_df, all_temporal_df, all_absolute_df, model_name, forecast_window, forecasting_technique, batch_type, alpha_ema, fairness_correction='kamiran_rw', subfolder_override=None):
     chart_label = 'all' if baseline_type == 'all' else baseline_type
     if subfolder_override is not None:
         subfolder = subfolder_override
@@ -97,8 +96,6 @@ def generate_all_charts(baseline_type, baselines, alpha, sensitive_attribute, al
         run_folder = _run_folder_name(model_name, alpha, forecasting_technique, forecast_window, batch_type, alpha_ema, fairness_correction)
         subfolder = os.path.join(sensitive_attribute, run_folder)
     _generate_performance_charts(all_assessment_df, all_temporal_df, baseline_type=chart_label, save=True, subfolder=subfolder, model_name=model_name, forecast_window=forecast_window, batch_type=batch_type)
-    if model_name != 'xgboost':
-        _generate_shap_charts(all_shap_records, save=True, subfolder=subfolder, model_name=model_name, forecast_window=forecast_window, batch_type=batch_type)
 
     if len(baselines) > 1:
         _generate_comparative_chart(all_assessment_df, moving_avg_window=20 if batch_type == 'weekly' else 5, save=True, subfolder=subfolder, model_name=model_name, forecast_window=forecast_window, batch_type=batch_type)
@@ -280,17 +277,6 @@ def compute_snapshot_metrics(
     )
 
     return acc, auc, dp_diff, tpr_diff, fpr_diff, tpr_S0, fpr_S0, tpr_S1, fpr_S1
-
-
-def compute_shap_values(model_name, model, X_test: pd.DataFrame) -> dict:
-    if model_name.lower() == 'xgboost':
-        explainer = shap.TreeExplainer(model)
-    elif model_name.lower() == 'logistic_regression':
-        explainer = shap.LinearExplainer(model, X_test)
-    else: raise ValueError(f"Unsupported model_name: {model_name}")
-
-    values = explainer.shap_values(X_test)
-    return {'shap_values': values, 'feature_names': list(X_test.columns)}
 
 
 _BASELINE_COLORS = {
@@ -520,63 +506,3 @@ def _generate_absolute_rates_chart(
         out_path = os.path.join(save_dir, 'absolute_rates_by_group.png')
         fig.savefig(out_path, dpi=150, bbox_inches='tight')
         print(f'Absolute rates chart saved to {os.path.abspath(out_path)}')
-
-
-def _generate_shap_charts(shap_records: list, save: bool = False, subfolder: str = '', model_name: str = '', forecast_window: int = 0, batch_type: str = 'monthly') -> None:
-    if not shap_records:
-        return
-
-    feature_names = shap_records[0]['feature_names']
-    shap_records = sorted(shap_records, key=lambda r: _batch_to_datetime([r['batch']], batch_type)[0])
-    batches = [r['batch'] for r in shap_records]
-
-    # mean |SHAP| per feature per batch → shape (n_batches, n_features)
-    mean_abs = np.array([
-        np.abs(r['shap_values']).mean(axis=0) for r in shap_records
-    ])
-
-    global_importance = mean_abs.mean(axis=0)
-    sorted_idx = np.argsort(global_importance)[::-1]
-
-    fig, (ax_bar, ax_heat) = plt.subplots(1, 2, figsize=(20, 12))
-
-    # --- global bar chart ---
-    ax_bar.barh(
-        [feature_names[i] for i in sorted_idx[::-1]],
-        global_importance[sorted_idx[::-1]],
-        color='steelblue',
-    )
-    ax_bar.set_xlabel('Mean |SHAP value|')
-    ax_bar.set_title('Global Feature Importance (all batches)')
-
-    # --- temporal heatmap ---
-    heatmap_data = mean_abs[:, sorted_idx].T  # (n_features, n_batches)
-    im = ax_heat.imshow(heatmap_data, aspect='auto', cmap='YlOrRd')
-    ax_heat.set_yticks(range(len(feature_names)))
-    ax_heat.set_yticklabels([feature_names[i] for i in sorted_idx], fontsize=8)
-
-    n_batches = len(batches)
-    tick_positions = np.linspace(0, n_batches - 1, min(_N_BINS, n_batches), dtype=int)
-    ax_heat.set_xticks(tick_positions)
-    ax_heat.set_xticklabels([batches[p] for p in tick_positions], rotation=45, ha='right', fontsize=8)
-    ax_heat.set_title('SHAP Feature Importance Over Time')
-    fig.colorbar(im, ax=ax_heat, label='Mean |SHAP value|')
-
-    batch_dates = _batch_to_datetime(batches, batch_type)
-    for vline_dt, vline_label in _VLINES:
-        idxs = [i for i, d in enumerate(batch_dates) if d >= vline_dt]
-        if idxs:
-            x = min(idxs) - 0.5
-            ax_heat.axvline(x=x, color='#555555', linestyle='--', linewidth=0.8, alpha=0.5)
-            ax_heat.text(x, -0.5, vline_label, rotation=90, fontsize=6,
-                         va='bottom', ha='right', color='#555555')
-
-    fig.suptitle('SHAP Value Analysis', fontsize=14, fontweight='bold')
-    plt.tight_layout()
-
-    if save:
-        save_dir = os.path.join(_FIGURES_DIR, subfolder) if subfolder else _FIGURES_DIR
-        os.makedirs(save_dir, exist_ok=True)
-        out_path = os.path.join(save_dir, 'shap_summary.png')
-        fig.savefig(out_path, dpi=150, bbox_inches='tight')
-        print(f'SHAP chart saved to {os.path.abspath(out_path)}')

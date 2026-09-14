@@ -80,7 +80,7 @@ The first 10 batches are skipped for `abcinml` (insufficient history to forecast
 
 ### Outputs
 
-- Charts: `src/figures/{sensitive_attribute}/{model_name}_alpha_{alpha_label}_window_{forecast_window}/` — `model_performance_metrics.png`, `model_performance_comparison.png`, `fairness_comparison_only.png`, `shap_summary.png`, `absolute_rates_by_group.png`
+- Charts: `src/figures/{sensitive_attribute}/{model_name}_alpha_{alpha_label}_window_{forecast_window}/` — `model_performance_metrics.png`, `model_performance_comparison.png`, `fairness_comparison_only.png`, `absolute_rates_by_group.png`
 - CSVs: `src/utils/results/{sensitive_attribute}/{model_name}_alpha_{alpha_label}_window_{forecast_window}/` — `assessment_all_baselines.csv`, `temporal_results_df.csv`, `absolute_results_df.csv`
 
 Both output directories are created automatically on first run. Comparative charts (`model_performance_comparison.png`, `fairness_comparison_only.png`, `absolute_rates_by_group.png`) are only generated when `--baseline_type all` (multiple baselines).
