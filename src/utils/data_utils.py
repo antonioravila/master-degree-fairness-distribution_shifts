@@ -111,7 +111,10 @@ def _convert_types(df: pd.DataFrame, window_column: str):
 
 
 def _filter_region(df, ):
-    df = df[df['SG_UF_NOT'].isin(['RS'])]
+    # Temporarily disabled for the all-regions experiments (was:
+    # df = df[df['SG_UF_NOT'].isin(['RS'])]). Restore that line to go back to
+    # RS-only. SG_UF_NOT is still dropped below regardless — it isn't one-hot
+    # encoded in _convert_types and isn't meant to be a model feature.
     df.pop('SG_UF_NOT')
     return df
 
