@@ -56,20 +56,39 @@ def _fairness_correction_suffix(fairness_correction):
     return f'_{fairness_correction}'
 
 
-def _run_folder_name(model_name, alpha, forecasting_technique, forecast_window, batch_type, alpha_ema, fairness_correction='kamiran_rw'):
+def _train_window_suffix(train_window):
+    # Always explicit (even for the 'none' / unbounded default) — same reasoning
+    # as _fairness_correction_suffix: an implicit/conditional suffix would make a
+    # folder ambiguous between "predates this axis" and "uses the default value".
+    token = 'none' if train_window is None else str(train_window)
+    return f'_trainwindow_{token}'
+
+
+def _run_folder_name(model_name, alpha, forecasting_technique, forecast_window, batch_type, alpha_ema, fairness_correction='kamiran_rw', train_window=None):
     ema_suffix = f'_ema_{alpha_ema}' if forecasting_technique == 'ema' else ''
     fc_suffix = _fairness_correction_suffix(fairness_correction)
+    tw_suffix = _train_window_suffix(train_window)
     alpha_str = str(int(alpha)) if float(alpha) == int(float(alpha)) else str(alpha)
-    return f'{model_name}_alpha_{alpha_str}_{forecasting_technique}_window_{forecast_window}_{batch_type}{ema_suffix}{fc_suffix}'
+    return f'{model_name}_alpha_{alpha_str}_{forecasting_technique}_window_{forecast_window}_{batch_type}{ema_suffix}{fc_suffix}{tw_suffix}'
 
 
 def baseline_non_abc_folder_name(model_name, batch_type, fairness_correction='kamiran_rw'):
+    # vanilla/static only — they never depend on train_window, so this folder
+    # name never carries a train_window suffix.
     fc_suffix = _fairness_correction_suffix(fairness_correction)
     return f'baseline_non_abc_{model_name}_{batch_type}{fc_suffix}'
 
 
-def save_results(sensitive_attribute, all_assessment_df, all_temporal_df, all_absolute_df, model_name, alpha, forecast_window, forecasting_technique, batch_type, alpha_ema, fairness_correction='kamiran_rw'):
-    run_folder = _run_folder_name(model_name, alpha, forecasting_technique, forecast_window, batch_type, alpha_ema, fairness_correction)
+def baseline_dynamic_folder_name(model_name, batch_type, fairness_correction='kamiran_rw', train_window=None):
+    # dynamic's own storage, separate from vanilla/static — see
+    # docs/train_window_migration_plan.md §3 for why this split exists.
+    fc_suffix = _fairness_correction_suffix(fairness_correction)
+    tw_suffix = _train_window_suffix(train_window)
+    return f'baseline_dynamic_{model_name}_{batch_type}{fc_suffix}{tw_suffix}'
+
+
+def save_results(sensitive_attribute, all_assessment_df, all_temporal_df, all_absolute_df, model_name, alpha, forecast_window, forecasting_technique, batch_type, alpha_ema, fairness_correction='kamiran_rw', train_window=None):
+    run_folder = _run_folder_name(model_name, alpha, forecasting_technique, forecast_window, batch_type, alpha_ema, fairness_correction, train_window)
     results_dir = os.path.join('src', 'results', sensitive_attribute, run_folder)
     os.makedirs(results_dir, exist_ok=True)
     all_assessment_df.to_csv(os.path.join(results_dir, 'assessment_all_baselines.csv'), index=False)
@@ -88,12 +107,22 @@ def save_baseline_non_abc_results(sensitive_attribute, all_assessment_df, all_te
     print(f'Non-ABC results saved to {os.path.abspath(results_dir)}')
 
 
-def generate_all_charts(baseline_type, baselines, alpha, sensitive_attribute, all_assessment_df, all_temporal_df, all_absolute_df, model_name, forecast_window, forecasting_technique, batch_type, alpha_ema, fairness_correction='kamiran_rw', subfolder_override=None):
+def save_baseline_dynamic_results(sensitive_attribute, all_assessment_df, all_temporal_df, all_absolute_df, model_name, batch_type, fairness_correction='kamiran_rw', train_window=None):
+    folder = baseline_dynamic_folder_name(model_name, batch_type, fairness_correction, train_window)
+    results_dir = os.path.join('src', 'results', sensitive_attribute, folder)
+    os.makedirs(results_dir, exist_ok=True)
+    all_assessment_df.to_csv(os.path.join(results_dir, 'assessment_all_baselines.csv'), index=False)
+    all_temporal_df.to_csv(os.path.join(results_dir, 'temporal_results_df.csv'), index=False)
+    all_absolute_df.to_csv(os.path.join(results_dir, 'absolute_results_df.csv'), index=False)
+    print(f'Dynamic results saved to {os.path.abspath(results_dir)}')
+
+
+def generate_all_charts(baseline_type, baselines, alpha, sensitive_attribute, all_assessment_df, all_temporal_df, all_absolute_df, model_name, forecast_window, forecasting_technique, batch_type, alpha_ema, fairness_correction='kamiran_rw', subfolder_override=None, train_window=None):
     chart_label = 'all' if baseline_type == 'all' else baseline_type
     if subfolder_override is not None:
         subfolder = subfolder_override
     else:
-        run_folder = _run_folder_name(model_name, alpha, forecasting_technique, forecast_window, batch_type, alpha_ema, fairness_correction)
+        run_folder = _run_folder_name(model_name, alpha, forecasting_technique, forecast_window, batch_type, alpha_ema, fairness_correction, train_window)
         subfolder = os.path.join(sensitive_attribute, run_folder)
     _generate_performance_charts(all_assessment_df, all_temporal_df, baseline_type=chart_label, save=True, subfolder=subfolder, model_name=model_name, forecast_window=forecast_window, batch_type=batch_type)
 

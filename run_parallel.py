@@ -18,6 +18,15 @@ BATCH_TYPES = ['monthly', 'weekly']
 # parity) — the measure is recorded in the CSVs, not the folder name.
 FAIRNESS_CORRECTIONS = ['kamiran_rw', 'adaptative_rw']
 
+# train_window axis (months bounding dynamic/abcinml's training history).
+# dynamic/abcinml are the whole reason train_window exists (they're the slow
+# baselines) — so unlike leaving this at [None], the default grid now sweeps
+# the candidate values from docs/train_window_migration_plan.md §2 for BOTH
+# fairness corrections. This does multiply the grid 4x (40 -> 160 scenarios,
+# see the combinatorics discussion there) — pass --train_windows to override
+# with a narrower set if you want to run just the exploration subset first.
+DEFAULT_TRAIN_WINDOWS = [None, 3, 6, 12]
+
 # Must match general_utils.py defaults
 ALPHAS = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1]
 SENSITIVE_ATTRIBUTE = 'IDADE_BIN'
@@ -47,17 +56,24 @@ def _fairness_correction_suffix(fairness_correction):
     return f'_{fairness_correction}'
 
 
-def _run_folder_name(model, alpha, technique, window, batch_type, fairness_correction='kamiran_rw'):
+def _train_window_suffix(train_window):
+    """Mirror of metrics_utils._train_window_suffix — keep in sync."""
+    token = 'none' if train_window is None else str(train_window)
+    return f'_trainwindow_{token}'
+
+
+def _run_folder_name(model, alpha, technique, window, batch_type, fairness_correction='kamiran_rw', train_window=None):
     """Mirror of metrics_utils._run_folder_name — keep in sync."""
     ema_suffix = f'_ema_{DEFAULT_ALPHA_EMA}' if technique == 'ema' else ''
     fc_suffix = _fairness_correction_suffix(fairness_correction)
-    return f'{model}_alpha_{_fmt_alpha(alpha)}_{technique}_window_{window}_{batch_type}{ema_suffix}{fc_suffix}'
+    tw_suffix = _train_window_suffix(train_window)
+    return f'{model}_alpha_{_fmt_alpha(alpha)}_{technique}_window_{window}_{batch_type}{ema_suffix}{fc_suffix}{tw_suffix}'
 
 
-def _folder_exists(results_dir, model, alpha, technique, window, batch_type, fairness_correction):
+def _folder_exists(results_dir, model, alpha, technique, window, batch_type, fairness_correction, train_window):
     """Check both alpha_1 and alpha_1.0 formats for backward compat with existing results."""
-    primary = results_dir / _run_folder_name(model, alpha, technique, window, batch_type, fairness_correction)
-    alt = results_dir / _run_folder_name(model, float(alpha), technique, window, batch_type, fairness_correction)
+    primary = results_dir / _run_folder_name(model, alpha, technique, window, batch_type, fairness_correction, train_window)
+    alt = results_dir / _run_folder_name(model, float(alpha), technique, window, batch_type, fairness_correction, train_window)
     return primary.exists() or alt.exists()
 
 
@@ -67,7 +83,7 @@ def _missing_alphas(entry):
         alpha for alpha in ALPHAS
         if not _folder_exists(
             results_dir, entry['model'], alpha, entry['technique'], entry['window'],
-            entry['batch_type'], entry['fairness_correction'],
+            entry['batch_type'], entry['fairness_correction'], entry['train_window'],
         )
     ]
 
@@ -114,7 +130,8 @@ def _scenario_cmd(model, technique, batch_type, window, with_window):
     return cmd
 
 
-def build_commands(fairness_corrections):
+def build_commands(fairness_corrections, train_windows=None):
+    train_windows = train_windows if train_windows is not None else DEFAULT_TRAIN_WINDOWS
     commands = []
 
     def _add(model, technique, window, batch_type, with_window):
@@ -124,15 +141,20 @@ def build_commands(fairness_corrections):
         )
         base_cmd = _scenario_cmd(model, technique, batch_type, window, with_window)
         for fc in fairness_corrections:
-            commands.append({
-                'model': model,
-                'technique': technique,
-                'window': window,
-                'batch_type': batch_type,
-                'fairness_correction': fc,
-                'label': f'{base_label} | fc={fc}',
-                'cmd': base_cmd + ['--fairness_correction', fc],
-            })
+            for tw in train_windows:
+                cmd = base_cmd + ['--fairness_correction', fc]
+                if tw is not None:
+                    cmd = cmd + ['--train_window', str(tw)]
+                commands.append({
+                    'model': model,
+                    'technique': technique,
+                    'window': window,
+                    'batch_type': batch_type,
+                    'fairness_correction': fc,
+                    'train_window': tw,
+                    'label': f"{base_label} | fc={fc} | trainwindow={'none' if tw is None else tw}",
+                    'cmd': cmd,
+                })
 
     for model in MODELS:
         for technique in TECHNIQUES_WITH_WINDOW:
@@ -200,12 +222,26 @@ def main():
         '--fairness_corrections', nargs='+', default=FAIRNESS_CORRECTIONS, choices=FAIRNESS_CORRECTIONS,
         help=f'Which fairness corrections to run. Default: {" ".join(FAIRNESS_CORRECTIONS)}.',
     )
+    parser.add_argument(
+        '--train_windows', nargs='+', default=None,
+        help=(
+            "Which --train_window values (months) to sweep for dynamic/abcinml, in addition to "
+            "the existing model/technique/window/batch_type/fairness_correction grid. Use the "
+            f"literal 'none' for unbounded history. Default: {['none' if w is None else w for w in DEFAULT_TRAIN_WINDOWS]} "
+            "for every fairness_correction requested (see docs/train_window_migration_plan.md)."
+        ),
+    )
     args = parser.parse_args()
+
+    train_windows = (
+        DEFAULT_TRAIN_WINDOWS if args.train_windows is None
+        else [None if tw.lower() == 'none' else int(tw) for tw in args.train_windows]
+    )
 
     log_dir = Path('logs')
     log_dir.mkdir(exist_ok=True)
 
-    scenarios = build_commands(args.fairness_corrections)
+    scenarios = build_commands(args.fairness_corrections, train_windows)
     jobs, n_complete = resolve_jobs(scenarios)
 
     if n_complete:

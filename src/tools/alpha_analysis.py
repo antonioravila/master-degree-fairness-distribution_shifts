@@ -50,6 +50,15 @@ def _load_abcinml(results_dir: str) -> pd.DataFrame:
         raise KeyError(
             "'model_name' column not found. Run src/tools/concatenate_results.py first."
         )
+    # This script's groupby('alpha') silently mixes rows across any other axis
+    # that varies (fairness_correction, train_window) — warn instead of failing,
+    # since older aggregates may not have these columns at all.
+    for col in ('fairness_correction', 'train_window'):
+        if col in df.columns and df[col].nunique(dropna=False) > 1:
+            print(
+                f"Warning: multiple distinct '{col}' values found "
+                f'({sorted(df[col].astype(str).unique())}) — the tables below mix them.'
+            )
     return df
 
 

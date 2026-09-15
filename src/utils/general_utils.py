@@ -24,6 +24,14 @@ def parse_arguments():
         choices=['sma', 'ema', 'oracle'],
     )
     parser.add_argument('--forecast_window', type=int, default=5)
+    parser.add_argument(
+        '--train_window', type=int, default=None,
+        help=(
+            'Bound (in months) on how much history dynamic/abcinml train on. '
+            'Default: None = unbounded (all prior batches, current behavior). '
+            'vanilla/static ignore this — they always train on a single batch.'
+        ),
+    )
     parser.add_argument('--batch_type', type=str, default='monthly', choices=['monthly', 'weekly'])
     parser.add_argument('--alpha_ema', type=float, default=0.5)
     parser.add_argument(
@@ -53,6 +61,7 @@ def parse_arguments():
     test_run = eval(args.test_run)
     forecasting_technique = args.forecasting_technique
     forecast_window = args.forecast_window
+    train_window = args.train_window
     batch_type = args.batch_type
     alpha_ema = args.alpha_ema
     fairness_correction = args.fairness_correction
@@ -76,6 +85,7 @@ def parse_arguments():
         test_run,
         forecasting_technique,
         forecast_window,
+        train_window,
         batch_type,
         alpha_ema,
         fairness_correction,
