@@ -29,7 +29,10 @@ _ABC_RE = re.compile(
 # train_window-dependent, see docs/train_window_migration_plan.md) share this
 # shape except for the prefix and the optional trainwindow suffix.
 _BASELINE_RE = re.compile(
-    r'^baseline_(?:non_abc|dynamic)_(?P<model>.+)_(?P<batch>monthly|weekly)(?:_(?P<fairness_correction>kamiran_rw|adaptative_rw))?(?:_trainwindow_(?P<train_window>\w+))?$'
+    # train_window is [^_]+, not \w+: \w matches underscores, so it would greedily
+    # swallow the _fw_{n} suffix that follows it ('none_fw_5') and leave the
+    # forecast_window group empty. Values are 3/6/12/none — never underscored.
+    r'^baseline_(?:non_abc|dynamic)_(?P<model>.+)_(?P<batch>monthly|weekly)(?:_(?P<fairness_correction>kamiran_rw|adaptative_rw))?(?:_trainwindow_(?P<train_window>[^_]+))?(?:_fw_(?P<forecast_window>\d+))?$'
 )
 
 
@@ -52,7 +55,7 @@ def _parse_folder(name: str) -> dict | None:
             'model_name': m.group('model'),
             'alpha': None,
             'forecasting_technique': None,
-            'forecast_window': None,
+            'forecast_window': m.group('forecast_window'),
             'batch_type': m.group('batch'),
             'alpha_ema': None,
             'fairness_correction': m.group('fairness_correction'),
