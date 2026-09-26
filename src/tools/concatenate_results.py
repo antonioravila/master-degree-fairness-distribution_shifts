@@ -32,7 +32,9 @@ _BASELINE_RE = re.compile(
     # train_window is [^_]+, not \w+: \w matches underscores, so it would greedily
     # swallow the _fw_{n} suffix that follows it ('none_fw_5') and leave the
     # forecast_window group empty. Values are 3/6/12/none — never underscored.
-    r'^baseline_(?:non_abc|dynamic)_(?P<model>.+)_(?P<batch>monthly|weekly)(?:_(?P<fairness_correction>kamiran_rw|adaptative_rw))?(?:_trainwindow_(?P<train_window>[^_]+))?(?:_fw_(?P<forecast_window>\d+))?$'
+    # forecast_window is required: legacy folders without _fw_ are skipped, not
+    # merged, so a restored pre-migration folder can't duplicate rows here.
+    r'^baseline_(?:non_abc|dynamic)_(?P<model>.+)_(?P<batch>monthly|weekly)(?:_(?P<fairness_correction>kamiran_rw|adaptative_rw))?(?:_trainwindow_(?P<train_window>[^_]+))?_fw_(?P<forecast_window>\d+)$'
 )
 
 
