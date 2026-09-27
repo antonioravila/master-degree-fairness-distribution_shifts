@@ -242,7 +242,7 @@ def main():
     non_abc_absolute_df = pd.DataFrame()
 
     if non_abc_to_run:
-        non_abc_folder = metrics_utils.baseline_non_abc_folder_name(model_name, batch_type, fairness_correction)
+        non_abc_folder = metrics_utils.baseline_non_abc_folder_name(model_name, batch_type, fairness_correction, forecast_window=forecast_window)
         non_abc_results_dir = os.path.join('src', 'results', sensitive_attribute, non_abc_folder)
         non_abc_assessment_path = os.path.join(non_abc_results_dir, 'assessment_all_baselines.csv')
         non_abc_subfolder = os.path.join(sensitive_attribute, non_abc_folder)
@@ -289,7 +289,7 @@ def main():
 
             metrics_utils.save_baseline_non_abc_results(
                 sensitive_attribute, non_abc_assessment_df, non_abc_temporal_df, non_abc_absolute_df,
-                model_name, batch_type, fairness_correction,
+                model_name, batch_type, fairness_correction, forecast_window=forecast_window,
             )
             metrics_utils.generate_all_charts(
                 baseline_type='all' if len(non_abc_to_run) > 1 else non_abc_to_run[0],
@@ -315,7 +315,7 @@ def main():
     dynamic_absolute_df = pd.DataFrame()
 
     if run_dynamic:
-        dynamic_folder = metrics_utils.baseline_dynamic_folder_name(model_name, batch_type, fairness_correction, train_window)
+        dynamic_folder = metrics_utils.baseline_dynamic_folder_name(model_name, batch_type, fairness_correction, train_window, forecast_window=forecast_window)
         dynamic_results_dir = os.path.join('src', 'results', sensitive_attribute, dynamic_folder)
         dynamic_assessment_path = os.path.join(dynamic_results_dir, 'assessment_all_baselines.csv')
         dynamic_subfolder = os.path.join(sensitive_attribute, dynamic_folder)
@@ -358,7 +358,7 @@ def main():
 
             metrics_utils.save_baseline_dynamic_results(
                 sensitive_attribute, dynamic_assessment_df, dynamic_temporal_df, dynamic_absolute_df,
-                model_name, batch_type, fairness_correction, train_window,
+                model_name, batch_type, fairness_correction, train_window, forecast_window=forecast_window,
             )
             metrics_utils.generate_all_charts(
                 baseline_type='dynamic',
@@ -385,7 +385,7 @@ def main():
     baselines_compared = non_abc_to_run + (['dynamic'] if run_dynamic else [])
     if len(baselines_compared) > 1:
         comparison_folder = 'baseline_comparison_' + metrics_utils.baseline_dynamic_folder_name(
-            model_name, batch_type, fairness_correction, train_window
+            model_name, batch_type, fairness_correction, train_window, forecast_window=forecast_window
         ).removeprefix('baseline_dynamic_')
         comparison_subfolder = os.path.join(sensitive_attribute, comparison_folder)
         metrics_utils.generate_all_charts(

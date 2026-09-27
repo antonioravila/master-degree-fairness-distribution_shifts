@@ -64,6 +64,16 @@ def _train_window_suffix(train_window):
     return f'_trainwindow_{token}'
 
 
+def _forecast_window_suffix(forecast_window):
+    # vanilla/static/dynamic don't forecast, but forecast_window still changes
+    # their output: it sets the warm-up skip in main.run_baseline, which decides
+    # which batches they're evaluated on (and, for vanilla/static, which single
+    # batch they train on). Folder names are cache keys, so it has to be here —
+    # otherwise a run with a different forecast_window silently reuses the
+    # cached result of the first one that wrote the folder.
+    return f'_fw_{forecast_window}'
+
+
 def _run_folder_name(model_name, alpha, forecasting_technique, forecast_window, batch_type, alpha_ema, fairness_correction='kamiran_rw', train_window=None):
     ema_suffix = f'_ema_{alpha_ema}' if forecasting_technique == 'ema' else ''
     fc_suffix = _fairness_correction_suffix(fairness_correction)
@@ -72,19 +82,23 @@ def _run_folder_name(model_name, alpha, forecasting_technique, forecast_window, 
     return f'{model_name}_alpha_{alpha_str}_{forecasting_technique}_window_{forecast_window}_{batch_type}{ema_suffix}{fc_suffix}{tw_suffix}'
 
 
-def baseline_non_abc_folder_name(model_name, batch_type, fairness_correction='kamiran_rw'):
+def baseline_non_abc_folder_name(model_name, batch_type, fairness_correction='kamiran_rw', *, forecast_window):
     # vanilla/static only — they never depend on train_window, so this folder
-    # name never carries a train_window suffix.
+    # name never carries a train_window suffix. forecast_window is keyword-only
+    # and has no default so a caller that forgets it fails loudly instead of
+    # silently building a name that collides with another forecast_window.
     fc_suffix = _fairness_correction_suffix(fairness_correction)
-    return f'baseline_non_abc_{model_name}_{batch_type}{fc_suffix}'
+    fw_suffix = _forecast_window_suffix(forecast_window)
+    return f'baseline_non_abc_{model_name}_{batch_type}{fc_suffix}{fw_suffix}'
 
 
-def baseline_dynamic_folder_name(model_name, batch_type, fairness_correction='kamiran_rw', train_window=None):
+def baseline_dynamic_folder_name(model_name, batch_type, fairness_correction='kamiran_rw', train_window=None, *, forecast_window):
     # dynamic's own storage, separate from vanilla/static — see
     # docs/train_window_migration_plan.md §3 for why this split exists.
     fc_suffix = _fairness_correction_suffix(fairness_correction)
     tw_suffix = _train_window_suffix(train_window)
-    return f'baseline_dynamic_{model_name}_{batch_type}{fc_suffix}{tw_suffix}'
+    fw_suffix = _forecast_window_suffix(forecast_window)
+    return f'baseline_dynamic_{model_name}_{batch_type}{fc_suffix}{tw_suffix}{fw_suffix}'
 
 
 def save_results(sensitive_attribute, all_assessment_df, all_temporal_df, all_absolute_df, model_name, alpha, forecast_window, forecasting_technique, batch_type, alpha_ema, fairness_correction='kamiran_rw', train_window=None):
@@ -97,8 +111,8 @@ def save_results(sensitive_attribute, all_assessment_df, all_temporal_df, all_ab
     print(f'Results saved to {os.path.abspath(results_dir)}')
 
 
-def save_baseline_non_abc_results(sensitive_attribute, all_assessment_df, all_temporal_df, all_absolute_df, model_name, batch_type, fairness_correction='kamiran_rw'):
-    folder = baseline_non_abc_folder_name(model_name, batch_type, fairness_correction)
+def save_baseline_non_abc_results(sensitive_attribute, all_assessment_df, all_temporal_df, all_absolute_df, model_name, batch_type, fairness_correction='kamiran_rw', *, forecast_window):
+    folder = baseline_non_abc_folder_name(model_name, batch_type, fairness_correction, forecast_window=forecast_window)
     results_dir = os.path.join('src', 'results', sensitive_attribute, folder)
     os.makedirs(results_dir, exist_ok=True)
     all_assessment_df.to_csv(os.path.join(results_dir, 'assessment_all_baselines.csv'), index=False)
@@ -107,8 +121,8 @@ def save_baseline_non_abc_results(sensitive_attribute, all_assessment_df, all_te
     print(f'Non-ABC results saved to {os.path.abspath(results_dir)}')
 
 
-def save_baseline_dynamic_results(sensitive_attribute, all_assessment_df, all_temporal_df, all_absolute_df, model_name, batch_type, fairness_correction='kamiran_rw', train_window=None):
-    folder = baseline_dynamic_folder_name(model_name, batch_type, fairness_correction, train_window)
+def save_baseline_dynamic_results(sensitive_attribute, all_assessment_df, all_temporal_df, all_absolute_df, model_name, batch_type, fairness_correction='kamiran_rw', train_window=None, *, forecast_window):
+    folder = baseline_dynamic_folder_name(model_name, batch_type, fairness_correction, train_window, forecast_window=forecast_window)
     results_dir = os.path.join('src', 'results', sensitive_attribute, folder)
     os.makedirs(results_dir, exist_ok=True)
     all_assessment_df.to_csv(os.path.join(results_dir, 'assessment_all_baselines.csv'), index=False)
