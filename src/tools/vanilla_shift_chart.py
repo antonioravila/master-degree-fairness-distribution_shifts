@@ -161,7 +161,7 @@ def build_chart(
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--sensitive_attribute', default='IDADE_BIN', choices=['CS_RACA', 'IDADE_BIN'])
-    parser.add_argument('--model_name', default='logistic_regression', choices=['logistic_regression', 'xgboost'])
+    parser.add_argument('--model_name', default='logistic_regression', choices=['logistic_regression', 'xgboost', 'random_forest'])
     parser.add_argument('--forecast_window', type=int, default=3, help='Selects which baseline_non_abc_*_fw_{n} folder to read.')
     args = parser.parse_args()
 

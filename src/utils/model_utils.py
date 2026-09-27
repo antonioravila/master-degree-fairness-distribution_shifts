@@ -2,12 +2,25 @@ import pandas as pd
 import numpy as np
 import xgboost as xgb
 from tqdm import tqdm
+from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
 
 def initialize_model(model_name, MAX_ITER):
     models_mapping = {
         'logistic_regression': LogisticRegression(max_iter=MAX_ITER),
-        'xgboost': xgb.XGBClassifier(device='cuda', tree_method='hist')
+        'xgboost': xgb.XGBClassifier(device='cuda', tree_method='hist'),
+        # Hyperparameters are not in the result folder name (the cache key):
+        # changing them requires a new model_name — see docs/random_forest_plan.md §5.
+        # No class_weight on purpose: group balancing is the reweighing's job.
+        # No min_samples_leaf: at 50 the ~7k-row vanilla/static batch never predicted
+        # a positive; max_depth alone bounds tree size (memory is dominated by the
+        # data copy, not the trees).
+        'random_forest': RandomForestClassifier(
+            n_estimators=100,
+            max_depth=12,
+            n_jobs=-1,
+            random_state=42,
+        ),
     }
 
     model = models_mapping.get(model_name)

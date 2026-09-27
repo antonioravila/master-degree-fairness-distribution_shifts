@@ -6,7 +6,15 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
-MODELS = ['logistic_regression', 'xgboost']
+MODELS = ['logistic_regression', 'xgboost', 'random_forest']
+
+# Model → worker pool. Anything not listed runs in the CPU pool, so a new model
+# lands in a known pool instead of silently never being submitted.
+POOL_BY_MODEL = {
+    'xgboost': 'gpu',
+    'random_forest': 'rf',
+}
+DEFAULT_POOL = 'cpu'
 TECHNIQUES_WITH_WINDOW = ['sma']
 TECHNIQUES_NO_WINDOW = ['ema', 'oracle']
 WINDOWS = [3, 5, 10]
@@ -39,9 +47,12 @@ RESULTS_BASE = Path('src/results')
 # For RTX Blackwell 8 GB: --max_xgb_workers 2 --max_lr_workers 4
 DEFAULT_XGB_WORKERS = 1
 DEFAULT_LR_WORKERS = 2
+# random_forest uses n_jobs=-1 (every core per process): more than one RF job at
+# once oversubscribes the CPU and runs slower than one alone.
+DEFAULT_RF_WORKERS = 1
 # APR retrains T times per fit (default T=20), so an APR job is ~20x a kamiran one.
-# This caps APR jobs running at once *across both model pools* (a shared gate on
-# top of the LR/XGB pools), independent of --max_lr_workers / --max_xgb_workers.
+# This caps APR jobs running at once *across all model pools* (a shared gate on
+# top of the LR/XGB/RF pools), independent of the per-pool worker limits.
 DEFAULT_APR_WORKERS = 1
 
 
@@ -201,7 +212,7 @@ def _now():
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Run experiment grid with separate parallelism for XGBoost (GPU) and LR (CPU).'
+        description='Run experiment grid with separate parallelism for XGBoost (GPU), LR (CPU) and RF (CPU, all cores).'
     )
     parser.add_argument(
         '--max_xgb_workers', type=int, default=DEFAULT_XGB_WORKERS,
@@ -212,9 +223,13 @@ def main():
         help=f'Max parallel logistic regression jobs (CPU-bound). Default: {DEFAULT_LR_WORKERS}.',
     )
     parser.add_argument(
+        '--max_rf_workers', type=int, default=DEFAULT_RF_WORKERS,
+        help=f'Max parallel random forest jobs (each uses every core). Default: {DEFAULT_RF_WORKERS}.',
+    )
+    parser.add_argument(
         '--max_apr_workers', type=int, default=DEFAULT_APR_WORKERS,
         help=(
-            f'Max APR (adaptative_rw) jobs running at once, across both model pools. '
+            f'Max APR (adaptative_rw) jobs running at once, across all model pools. '
             f'Default: {DEFAULT_APR_WORKERS}. APR retrains ~20x per fit, so keep this low.'
         ),
     )
@@ -256,13 +271,16 @@ def main():
 
     apr_gate = threading.Semaphore(max(1, args.max_apr_workers))
 
-    xgb_jobs = [j for j in jobs if j['model'] == 'xgboost']
-    lr_jobs = [j for j in jobs if j['model'] == 'logistic_regression']
+    pool_jobs = {'cpu': [], 'gpu': [], 'rf': []}
+    for j in jobs:
+        pool_jobs[POOL_BY_MODEL.get(j['model'], DEFAULT_POOL)].append(j)
+    assert sum(len(p) for p in pool_jobs.values()) == len(jobs), 'some jobs were not routed to a pool'
     n_apr = sum(1 for j in jobs if j['fairness_correction'] == 'adaptative_rw')
 
     print(
-        f'Launching {len(lr_jobs)} LR jobs (max_workers={args.max_lr_workers}) '
-        f'and {len(xgb_jobs)} XGBoost jobs (max_workers={args.max_xgb_workers}) '
+        f'Launching {len(pool_jobs["cpu"])} LR jobs (max_workers={args.max_lr_workers}), '
+        f'{len(pool_jobs["gpu"])} XGBoost jobs (max_workers={args.max_xgb_workers}) '
+        f'and {len(pool_jobs["rf"])} RF jobs (max_workers={args.max_rf_workers}) '
         f'in parallel pools; {n_apr} of them are APR, gated to {args.max_apr_workers} at a time. '
         f'Logs → {log_dir}/\n'
     )
@@ -271,11 +289,12 @@ def main():
     with (
         concurrent.futures.ThreadPoolExecutor(max_workers=args.max_lr_workers) as lr_pool,
         concurrent.futures.ThreadPoolExecutor(max_workers=args.max_xgb_workers) as xgb_pool,
+        concurrent.futures.ThreadPoolExecutor(max_workers=args.max_rf_workers) as rf_pool,
     ):
-        for job in lr_jobs:
-            futures.append(lr_pool.submit(run_command, job, log_dir, apr_gate))
-        for job in xgb_jobs:
-            futures.append(xgb_pool.submit(run_command, job, log_dir, apr_gate))
+        pools = {'cpu': lr_pool, 'gpu': xgb_pool, 'rf': rf_pool}
+        for name, pool in pools.items():
+            for job in pool_jobs[name]:
+                futures.append(pool.submit(run_command, job, log_dir, apr_gate))
 
         results = [f.result() for f in concurrent.futures.as_completed(futures)]
 
