@@ -15,7 +15,7 @@ def parse_arguments():
     )
     parser.add_argument('--sensitive_attribute', type=str, default='IDADE_BIN')
     parser.add_argument('--target_label', type=str, default='EVOLUCAO')
-    parser.add_argument('--model_name', type=str, choices=['logistic_regression', 'xgboost', 'random_forest'])
+    parser.add_argument('--model_name', type=str, choices=['logistic_regression', 'xgboost', 'random_forest', 'lightgbm'])
     parser.add_argument('--test_run', type=str, default='False', choices=['True', 'False'])
     parser.add_argument(
         '--forecasting_technique',

@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 import xgboost as xgb
+import lightgbm as lgb
 from tqdm import tqdm
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
@@ -20,6 +21,13 @@ def initialize_model(model_name, MAX_ITER):
             max_depth=12,
             n_jobs=-1,
             random_state=42,
+        ),
+        'lightgbm': lgb.LGBMClassifier(
+            n_estimators=100,
+            num_leaves=31,
+            n_jobs=-1,
+            random_state=42,
+            verbose=-1,
         ),
     }
 

@@ -6,13 +6,16 @@ import threading
 from datetime import datetime
 from pathlib import Path
 
-MODELS = ['logistic_regression', 'xgboost', 'random_forest']
+MODELS = ['logistic_regression', 'xgboost', 'random_forest', 'lightgbm']
 
 # Model → worker pool. Anything not listed runs in the CPU pool, so a new model
 # lands in a known pool instead of silently never being submitted.
 POOL_BY_MODEL = {
     'xgboost': 'gpu',
     'random_forest': 'rf',
+    # lightgbm also uses n_jobs=-1: it shares RF's heavy-CPU pool (docs/lightgbm_plan.md §6.2)
+    # and still runs alongside xgboost, which is on the GPU.
+    'lightgbm': 'rf',
 }
 DEFAULT_POOL = 'cpu'
 TECHNIQUES_WITH_WINDOW = ['sma']
@@ -47,8 +50,8 @@ RESULTS_BASE = Path('src/results')
 # For RTX Blackwell 8 GB: --max_xgb_workers 2 --max_lr_workers 4
 DEFAULT_XGB_WORKERS = 1
 DEFAULT_LR_WORKERS = 2
-# random_forest uses n_jobs=-1 (every core per process): more than one RF job at
-# once oversubscribes the CPU and runs slower than one alone.
+# random_forest and lightgbm use n_jobs=-1 (every core per process): more than one
+# of their jobs at once oversubscribes the CPU and runs slower than one alone.
 DEFAULT_RF_WORKERS = 1
 # APR retrains T times per fit (default T=20), so an APR job is ~20x a kamiran one.
 # This caps APR jobs running at once *across all model pools* (a shared gate on
@@ -141,7 +144,8 @@ def _scenario_cmd(model, technique, batch_type, window, with_window):
     return cmd
 
 
-def build_commands(fairness_corrections, train_windows=None):
+def build_commands(fairness_corrections, train_windows=None, models=None):
+    models = models if models is not None else MODELS
     train_windows = train_windows if train_windows is not None else DEFAULT_TRAIN_WINDOWS
     commands = []
 
@@ -167,7 +171,7 @@ def build_commands(fairness_corrections, train_windows=None):
                     'cmd': cmd,
                 })
 
-    for model in MODELS:
+    for model in models:
         for technique in TECHNIQUES_WITH_WINDOW:
             for window in WINDOWS:
                 for batch_type in BATCH_TYPES:
@@ -212,7 +216,7 @@ def _now():
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Run experiment grid with separate parallelism for XGBoost (GPU), LR (CPU) and RF (CPU, all cores).'
+        description='Run experiment grid with separate parallelism for XGBoost (GPU), LR (CPU) and RF/LightGBM (CPU, all cores).'
     )
     parser.add_argument(
         '--max_xgb_workers', type=int, default=DEFAULT_XGB_WORKERS,
@@ -224,7 +228,7 @@ def main():
     )
     parser.add_argument(
         '--max_rf_workers', type=int, default=DEFAULT_RF_WORKERS,
-        help=f'Max parallel random forest jobs (each uses every core). Default: {DEFAULT_RF_WORKERS}.',
+        help=f'Max parallel random forest + LightGBM jobs, shared pool (each uses every core). Default: {DEFAULT_RF_WORKERS}.',
     )
     parser.add_argument(
         '--max_apr_workers', type=int, default=DEFAULT_APR_WORKERS,
@@ -232,6 +236,10 @@ def main():
             f'Max APR (adaptative_rw) jobs running at once, across all model pools. '
             f'Default: {DEFAULT_APR_WORKERS}. APR retrains ~20x per fit, so keep this low.'
         ),
+    )
+    parser.add_argument(
+        '--models', nargs='+', default=MODELS, choices=MODELS,
+        help=f'Which models to run. Default: {" ".join(MODELS)}.',
     )
     parser.add_argument(
         '--fairness_corrections', nargs='+', default=FAIRNESS_CORRECTIONS, choices=FAIRNESS_CORRECTIONS,
@@ -256,7 +264,7 @@ def main():
     log_dir = Path('logs')
     log_dir.mkdir(exist_ok=True)
 
-    scenarios = build_commands(args.fairness_corrections, train_windows)
+    scenarios = build_commands(args.fairness_corrections, train_windows, args.models)
     jobs, n_complete = resolve_jobs(scenarios)
 
     if n_complete:
@@ -280,7 +288,7 @@ def main():
     print(
         f'Launching {len(pool_jobs["cpu"])} LR jobs (max_workers={args.max_lr_workers}), '
         f'{len(pool_jobs["gpu"])} XGBoost jobs (max_workers={args.max_xgb_workers}) '
-        f'and {len(pool_jobs["rf"])} RF jobs (max_workers={args.max_rf_workers}) '
+        f'and {len(pool_jobs["rf"])} RF/LightGBM jobs (max_workers={args.max_rf_workers}) '
         f'in parallel pools; {n_apr} of them are APR, gated to {args.max_apr_workers} at a time. '
         f'Logs → {log_dir}/\n'
     )

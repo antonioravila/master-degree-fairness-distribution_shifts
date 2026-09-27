@@ -402,7 +402,7 @@ uv run python src/tools/regenerate_charts.py --results_dir src/results/IDADE_BIN
 
 ## Installation & Usage
 
-**Requirements:** Python >= 3.12, [uv](https://github.com/astral-sh/uv), and an NVIDIA GPU with CUDA for `xgboost` (it is created with `device='cuda'`; `logistic_regression` and `random_forest` run on CPU only). `random_forest` uses every core (`n_jobs=-1`) and peaks at ~4.6 GB RAM when `dynamic` trains on the full, unbounded history.
+**Requirements:** Python >= 3.12, [uv](https://github.com/astral-sh/uv), and an NVIDIA GPU with CUDA for `xgboost` (it is created with `device='cuda'`; `logistic_regression`, `random_forest` and `lightgbm` run on CPU only). `random_forest` uses every core (`n_jobs=-1`) and peaks at ~4.6 GB RAM when `dynamic` trains on the full, unbounded history. `lightgbm` also uses every core (`n_jobs=-1`); its PyPI wheel has no GPU support.
 
 All commands must be run from the repository root — result, figure and data paths are relative (`src/results/...`).
 
@@ -470,7 +470,7 @@ Note: `--window_column` no longer exists — batching granularity is selected vi
 | `--baseline_type` | str | `all` | `vanilla`, `static`, `dynamic`, `abcinml`, or `all` |
 | `--sensitive_attribute` | str | `IDADE_BIN` | `CS_RACA` (race) or `IDADE_BIN` (age >= 65) |
 | `--target_label` | str | `EVOLUCAO` | Target column |
-| `--model_name` | str | — (required) | `logistic_regression`, `xgboost`, or `random_forest` |
+| `--model_name` | str | — (required) | `logistic_regression`, `xgboost`, `random_forest`, or `lightgbm` |
 | `--alpha` | float | `None` | Blend parameter for ABCINML. If omitted, runs all `[0.0, 0.1, ..., 1.0]` |
 | `--batch_type` | str | `monthly` | `monthly` (→ `YEAR-MONTH`) or `weekly` (→ `YEAR-WEEK`) |
 | `--forecasting_technique` | str | `sma` | `sma`, `ema`, or `oracle` (diagnostic only) |
@@ -489,7 +489,7 @@ Note: `--window_column` no longer exists — batching granularity is selected vi
 
 ## Parallel Grid Run
 
-`run_parallel.py` runs the full experiment grid in parallel — separate thread pools for logistic regression (CPU), XGBoost (GPU) and random forest (CPU, `--max_rf_workers`, default 1 since each RF job already uses every core), plus a semaphore gate limiting how many `adaptative_rw` (APR) jobs run at once, since APR retrains the model `apr_iterations` times per fit and is far more expensive than `kamiran_rw`. Jobs are routed to pools by a model→pool map (`POOL_BY_MODEL`); an unlisted model falls back to the CPU pool, and an assertion guarantees no job is left unsubmitted.
+`run_parallel.py` runs the full experiment grid in parallel — separate thread pools for logistic regression (CPU), XGBoost (GPU) and a heavy-CPU pool shared by random forest and LightGBM (`--max_rf_workers`, default 1 since each RF/LightGBM job already uses every core; LightGBM jobs still run alongside XGBoost, which is on the GPU), plus a semaphore gate limiting how many `adaptative_rw` (APR) jobs run at once, since APR retrains the model `apr_iterations` times per fit and is far more expensive than `kamiran_rw`. Jobs are routed to pools by a model→pool map (`POOL_BY_MODEL`); an unlisted model falls back to the CPU pool, and an assertion guarantees no job is left unsubmitted.
 
 ```bash
 # Run full grid (resumes automatically — skips already-complete scenarios)
@@ -503,6 +503,9 @@ uv run python run_parallel.py --fairness_corrections kamiran_rw
 
 # Narrow the train_window sweep
 uv run python run_parallel.py --train_windows none 6
+
+# Run only some models (default: all four)
+uv run python run_parallel.py --models lightgbm
 ```
 
 Each run uses the default `sensitive_attribute=IDADE_BIN`. A scenario is considered **complete** when all 11 alpha folders (α = 0.0, 0.1, …, 1.0) exist for it under `src/results/IDADE_BIN/`. Incomplete scenarios are re-run only for their missing alphas; complete ones are skipped.
@@ -513,15 +516,15 @@ The base grid (model × technique/window × batch_type) is:
 
 | Model | Technique | Window (months) | Batch type |
 |-------|-----------|--------|-------|
-| `logistic_regression`, `xgboost`, `random_forest` | `sma` | 3, 5, 10 | `monthly`, `weekly` |
-| `logistic_regression`, `xgboost`, `random_forest` | `ema` | 5 (default, no `--forecast_window` passed) | `monthly`, `weekly` |
-| `logistic_regression`, `xgboost`, `random_forest` | `oracle` | 5 (default, no `--forecast_window` passed) | `monthly`, `weekly` |
+| `logistic_regression`, `xgboost`, `random_forest`, `lightgbm` | `sma` | 3, 5, 10 | `monthly`, `weekly` |
+| `logistic_regression`, `xgboost`, `random_forest`, `lightgbm` | `ema` | 5 (default, no `--forecast_window` passed) | `monthly`, `weekly` |
+| `logistic_regression`, `xgboost`, `random_forest`, `lightgbm` | `oracle` | 5 (default, no `--forecast_window` passed) | `monthly`, `weekly` |
 
-That base grid (30 scenarios) is then multiplied by:
+That base grid (40 scenarios) is then multiplied by:
 - `--fairness_corrections` (default: both `kamiran_rw` and `adaptative_rw`)
 - `--train_windows` (default: `none`, `3`, `6`, `12` months)
 
-giving 240 scenarios by default (each producing 11 alpha result folders plus one `baseline_non_abc_*` / `baseline_dynamic_*` pair). Logs for each command are written to `logs/` in the project root.
+giving 320 scenarios by default (each producing 11 alpha result folders plus one `baseline_non_abc_*` / `baseline_dynamic_*` pair). Logs for each command are written to `logs/` in the project root.
 
 ---
 
@@ -587,6 +590,7 @@ All scripts live in `src/tools/` and are run with `uv run python src/tools/<scri
 | `pandas` | Data manipulation and time-series handling |
 | `scikit-learn` | Logistic Regression, Random Forest, accuracy, AUC, confusion matrix |
 | `xgboost` | Gradient boosted tree classifier (GPU, `device='cuda'`) |
+| `lightgbm` | Leaf-wise gradient boosted tree classifier (CPU, all cores) |
 | `fairlearn` | Demographic parity, TPR diff, FPR diff |
 | `matplotlib` | All chart generation |
 | `seaborn` | Color palette used for chart period-span colors |

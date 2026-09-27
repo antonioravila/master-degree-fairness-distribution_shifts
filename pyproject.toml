@@ -5,6 +5,7 @@ requires-python = ">=3.12"
 dependencies = [
     "fairlearn>=0.13.0",
     "folktables>=0.0.12",
+    "lightgbm>=4.7.0",
     "matplotlib>=3.10.8",
     "pandas>=2.3.3",
     "pyarrow>=23.0.1",
