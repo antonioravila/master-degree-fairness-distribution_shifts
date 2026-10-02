@@ -139,6 +139,7 @@ def _regenerate_one(run_dir: Path, sensitive_attribute: str, fairness_correction
         alpha_ema,
         fairness_correction=fairness_correction,
         subfolder_override=subfolder_override,
+        train_window=train_window,
     )
     plt.close('all')
 

@@ -133,6 +133,7 @@ def initialize_variables(df, window_column, alpha_ema=0.5):
             'dp': [],
             'tpr_diff': [],
             'fpr_diff': [],
+            'eq_odds_diff': [],
             'batch': [],
             'alpha': [],
         }

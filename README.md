@@ -321,6 +321,7 @@ Computed by `metrics_utils.compute_snapshot_metrics` at each evaluation batch:
 | Demographic Parity Difference | `dp` | `P(Y_hat=1\|S=1) - P(Y_hat=1\|S=0)` — lower absolute value is fairer |
 | TPR Difference | `tpr_diff` | `TPR(S=1) - TPR(S=0)` — equalized odds component |
 | FPR Difference | `fpr_diff` | `FPR(S=1) - FPR(S=0)` — equalized odds component |
+| Equalized Odds Difference | `eq_odds_diff` | `max(tpr_diff, fpr_diff)` — the worse of the two equalized odds components |
 
 Absolute group rates (`tpr_S0`, `fpr_S0`, `tpr_S1`, `fpr_S1`) are also tracked separately (`absolute_results_df.csv`).
 
@@ -542,6 +543,7 @@ All scripts live in `src/tools/` and are run with `uv run python src/tools/<scri
 | `migrate_legacy_schema.py` | One-off migration: renames pre-APR-refactor CSV columns/folders (`sp`→`dp`, `tpr`→`tpr_diff`, `fpr`→`fpr_diff`) to the current schema. |
 | `migrate_train_window_schema.py` | One-off migration: splits legacy `baseline_non_abc_*` folders into separate `vanilla`/`static` vs. `dynamic` folders and appends the `_trainwindow_none` suffix everywhere, for results produced before `--train_window` existed. |
 | `migrate_forecast_window_schema.py` | One-off migration: backfills the `_fw_{forecast_window}` suffix onto existing `baseline_non_abc_*`/`baseline_dynamic_*` folders. |
+| `migrate_add_eq_odds_diff.py` | Adds/recomputes `eq_odds_diff = max(tpr_diff, fpr_diff)` in every `assessment_all_baselines.csv` under `src/results/` (including `all/`), without retraining. Idempotent — rerun it on results produced by older code. `--dry-run` lists the files without writing. |
 
 ---
 
