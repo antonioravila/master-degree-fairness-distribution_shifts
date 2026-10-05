@@ -149,7 +149,7 @@ def run_baseline(
         sf_test = X_test[sensitive_attribute]
 
         print(f'(1.1.4) testing {model_name} model')
-        acc, auc, dp, tpr_diff, fpr_diff, tpr_S0, fpr_S0, tpr_S1, fpr_S1 = (
+        acc, auc, dp, tpr_diff, fpr_diff, eq_odds_diff, tpr_S0, fpr_S0, tpr_S1, fpr_S1 = (
             metrics_utils.compute_snapshot_metrics(
                 y_test, y_pred, y_pred_proba, sf_test
             )
@@ -161,6 +161,7 @@ def run_baseline(
             dp,
             tpr_diff,
             fpr_diff,
+            eq_odds_diff,
             batch,
             alpha,
         ]

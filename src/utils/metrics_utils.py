@@ -15,6 +15,7 @@ _SNAPSHOT_METRICS = [
     ('dp', 'Demographic Parity Diff.'),
     ('tpr_diff', 'TPR Difference'),
     ('fpr_diff', 'FPR Difference'),
+    ('eq_odds_diff', 'Equalized Odds Diff.'),
 ]
 
 _FIGURES_DIR = os.path.join(os.path.dirname(__file__), '..', 'figures')
@@ -318,8 +319,10 @@ def compute_snapshot_metrics(
     fpr_diff = false_positive_rate_difference(
         y_true=y_test, y_pred=y_pred, sensitive_features=sensitive_features
     )
+    # fmax ignores a single NaN, matching pandas max(axis=1) in migrate_add_eq_odds_diff.py
+    eq_odds_diff = float(np.fmax(tpr_diff, fpr_diff))
 
-    return acc, auc, dp_diff, tpr_diff, fpr_diff, tpr_S0, fpr_S0, tpr_S1, fpr_S1
+    return acc, auc, dp_diff, tpr_diff, fpr_diff, eq_odds_diff, tpr_S0, fpr_S0, tpr_S1, fpr_S1
 
 
 _BASELINE_COLORS = {
@@ -395,7 +398,7 @@ def _generate_comparative_chart(
             period_handles = handles
 
         # Fairness reference lines
-        is_fairness = col in ('dp', 'tpr_diff', 'fpr_diff')
+        is_fairness = col in ('dp', 'tpr_diff', 'fpr_diff', 'eq_odds_diff')
         if is_fairness:
             ax.axhline(y=0, color='black', linestyle='--', linewidth=1.0, alpha=0.5, zorder=2)
 

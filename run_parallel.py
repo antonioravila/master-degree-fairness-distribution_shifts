@@ -254,6 +254,10 @@ def main():
             "for every fairness_correction requested (see docs/train_window_migration_plan.md)."
         ),
     )
+    parser.add_argument(
+        '--techniques', nargs='+', default=['sma', 'ema', 'oracle'], choices=['sma', 'ema', 'oracle'],
+        help='Which forecasting techniques to run. Default: sma ema oracle.',
+    )
     args = parser.parse_args()
 
     train_windows = (
@@ -265,6 +269,7 @@ def main():
     log_dir.mkdir(exist_ok=True)
 
     scenarios = build_commands(args.fairness_corrections, train_windows, args.models)
+    scenarios = [s for s in scenarios if s['technique'] in args.techniques]
     jobs, n_complete = resolve_jobs(scenarios)
 
     if n_complete:
