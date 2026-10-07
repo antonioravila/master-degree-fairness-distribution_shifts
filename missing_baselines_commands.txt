@@ -1,0 +1,59 @@
+# Missing baseline folders for scenarios run_parallel.py considers complete (LR and XGBoost).
+# 8 vanilla/static folders (group A) + 32 dynamic folders (7 come from group A, 25 from group B).
+# Run from the repository root, one command at a time (XGBoost uses the GPU).
+# Valid PowerShell: rename to .ps1 to run it as a script.
+
+# ---------------------------------------------------------------------------
+# Group A: vanilla + static (and dynamic, train_window none).
+# --baseline_type all is the only mode that generates vanilla AND static together;
+# --alpha 0.55 points the extra abcinml run at an alpha that does not exist,
+# so no committed result is overwritten. Those 0.55 runs are deleted below.
+# ---------------------------------------------------------------------------
+uv run python src/main.py --model_name logistic_regression --batch_type monthly --forecast_window 5 --fairness_correction adaptative_rw --baseline_type all --alpha 0.55
+uv run python src/main.py --model_name logistic_regression --batch_type monthly --forecast_window 5 --baseline_type all --alpha 0.55
+uv run python src/main.py --model_name logistic_regression --batch_type monthly --forecast_window 10 --baseline_type all --alpha 0.55
+uv run python src/main.py --model_name logistic_regression --batch_type weekly --forecast_window 10 --baseline_type all --alpha 0.55
+uv run python src/main.py --model_name xgboost --batch_type monthly --forecast_window 5 --baseline_type all --alpha 0.55
+uv run python src/main.py --model_name xgboost --batch_type monthly --forecast_window 10 --baseline_type all --alpha 0.55
+uv run python src/main.py --model_name xgboost --batch_type weekly --forecast_window 5 --baseline_type all --alpha 0.55
+uv run python src/main.py --model_name xgboost --batch_type weekly --forecast_window 10 --baseline_type all --alpha 0.55
+
+# ---------------------------------------------------------------------------
+# Right after group A: delete the alpha 0.55 runs, otherwise the concatenation
+# includes them and they contaminate the means across alphas.
+# ---------------------------------------------------------------------------
+Remove-Item -Recurse src\results\IDADE_BIN\*_alpha_0.55_*, src\figures\IDADE_BIN\*_alpha_0.55_*
+
+# ---------------------------------------------------------------------------
+# Group B: the remaining 25 dynamic folders.
+# ---------------------------------------------------------------------------
+uv run python src/main.py --model_name logistic_regression --batch_type monthly --forecast_window 5 --baseline_type dynamic --train_window 3
+uv run python src/main.py --model_name logistic_regression --batch_type monthly --forecast_window 5 --baseline_type dynamic --train_window 6
+uv run python src/main.py --model_name logistic_regression --batch_type monthly --forecast_window 5 --baseline_type dynamic --train_window 12
+uv run python src/main.py --model_name logistic_regression --batch_type monthly --forecast_window 10 --baseline_type dynamic --train_window 3
+uv run python src/main.py --model_name logistic_regression --batch_type monthly --forecast_window 10 --baseline_type dynamic --train_window 6
+uv run python src/main.py --model_name logistic_regression --batch_type monthly --forecast_window 10 --baseline_type dynamic --train_window 12
+uv run python src/main.py --model_name logistic_regression --batch_type weekly --forecast_window 3 --baseline_type dynamic
+uv run python src/main.py --model_name logistic_regression --batch_type weekly --forecast_window 5 --baseline_type dynamic --train_window 3
+uv run python src/main.py --model_name logistic_regression --batch_type weekly --forecast_window 5 --baseline_type dynamic --train_window 6
+uv run python src/main.py --model_name logistic_regression --batch_type weekly --forecast_window 5 --baseline_type dynamic --train_window 12
+uv run python src/main.py --model_name logistic_regression --batch_type weekly --forecast_window 10 --baseline_type dynamic --train_window 3
+uv run python src/main.py --model_name logistic_regression --batch_type weekly --forecast_window 10 --baseline_type dynamic --train_window 6
+uv run python src/main.py --model_name logistic_regression --batch_type weekly --forecast_window 10 --baseline_type dynamic --train_window 12
+uv run python src/main.py --model_name xgboost --batch_type monthly --forecast_window 5 --baseline_type dynamic --train_window 3
+uv run python src/main.py --model_name xgboost --batch_type monthly --forecast_window 5 --baseline_type dynamic --train_window 6
+uv run python src/main.py --model_name xgboost --batch_type monthly --forecast_window 5 --baseline_type dynamic --train_window 12
+uv run python src/main.py --model_name xgboost --batch_type monthly --forecast_window 10 --baseline_type dynamic --train_window 3
+uv run python src/main.py --model_name xgboost --batch_type monthly --forecast_window 10 --baseline_type dynamic --train_window 6
+uv run python src/main.py --model_name xgboost --batch_type monthly --forecast_window 10 --baseline_type dynamic --train_window 12
+uv run python src/main.py --model_name xgboost --batch_type weekly --forecast_window 5 --baseline_type dynamic --train_window 3
+uv run python src/main.py --model_name xgboost --batch_type weekly --forecast_window 5 --baseline_type dynamic --train_window 6
+uv run python src/main.py --model_name xgboost --batch_type weekly --forecast_window 5 --baseline_type dynamic --train_window 12
+uv run python src/main.py --model_name xgboost --batch_type weekly --forecast_window 10 --baseline_type dynamic --train_window 3
+uv run python src/main.py --model_name xgboost --batch_type weekly --forecast_window 10 --baseline_type dynamic --train_window 6
+uv run python src/main.py --model_name xgboost --batch_type weekly --forecast_window 10 --baseline_type dynamic --train_window 12
+
+# ---------------------------------------------------------------------------
+# Afterwards: rebuild the aggregate, then rerun 02_comparacao_baselines_kamiran.ipynb.
+# ---------------------------------------------------------------------------
+uv run python src/tools/concatenate_results.py
