@@ -1,0 +1,16 @@
+\begin{table}
+  \caption{Mean TPR and FPR by Baseline and Group, averaged over monthly and weekly batches - Logistic Regression.}
+  \label{tab:absolute-rates-lr-combined}
+  \begin{tabular}{lrrrr}
+    \toprule
+     & \multicolumn{2}{c}{TPR} & \multicolumn{2}{c}{FPR} \\
+    \cmidrule(lr){2-3} \cmidrule(lr){4-5}
+    Baseline & S0 (privileged) & S1 (sensitive) & S0 (privileged) & S1 (sensitive) \\
+    \midrule
+    vanilla & 20.34\% & 48.27\% & 2.58\% & 20.56\% \\
+    static & 29.48\% & 25.88\% & 4.32\% & 7.66\% \\
+    dynamic & 37.65\% & 27.39\% & 3.75\% & 4.30\% \\
+    abcinml & 39.14\% & 25.95\% & 3.94\% & 4.03\% \\
+    \bottomrule
+  \end{tabular}
+\end{table}

@@ -49,7 +49,7 @@ _VANILLA_COLOR = _BASELINE_COLORS['vanilla']
 
 def _load_vanilla(model_name: str, sensitive_attribute: str, batch_type: str, forecast_window: int) -> pd.DataFrame:
     folder = metrics_utils.baseline_non_abc_folder_name(model_name, batch_type, forecast_window=forecast_window)
-    path = Path('src') / 'results' / sensitive_attribute / folder / 'assessment_all_baselines.csv'
+    path = _SRC / 'results' / sensitive_attribute / folder / 'assessment_all_baselines.csv'
     if not path.exists():
         raise FileNotFoundError(
             f'{path} not found — run baseline_type=vanilla for batch_type={batch_type} first.'

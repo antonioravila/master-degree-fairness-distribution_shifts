@@ -1,0 +1,17 @@
+\begin{table}
+  \small
+  \caption{Temporal Fairness Metrics by Baseline - Logistic Regression. M = monthly (forecast window = 3), W = weekly (forecast window = 5).}
+  \label{tab:temporal-lr-combined}
+  \begin{tabular}{lrrrrrr}
+    \toprule
+     & \multicolumn{2}{c}{Max. Bias $\downarrow$} & \multicolumn{2}{c}{Temporal Stability $\downarrow$} & \multicolumn{2}{c}{Max. Bias Diff. $\downarrow$} \\
+    \cmidrule(lr){2-3} \cmidrule(lr){4-5} \cmidrule(lr){6-7}
+    Baseline & M & W & M & W & M & W \\
+    \midrule
+    vanilla & 33.73\% & 36.42\% & 1.29\% & 1.95\% & 7.66\% & 24.94\% \\
+    static & 10.10\% & 18.12\% & 1.14\% & 1.55\% & 6.19\% & 10.99\% \\
+    dynamic & \textbf{8.25\%} & 10.97\% & \textbf{0.99\%} & 1.13\% & \textbf{4.78\%} & \textbf{8.14\%} \\
+    abcinml & 9.13\% & \textbf{9.95\%} & 1.17\% & \textbf{1.12\%} & 5.00\% & 8.65\% \\
+    \bottomrule
+  \end{tabular}
+\end{table}

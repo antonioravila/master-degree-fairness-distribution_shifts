@@ -1,0 +1,16 @@
+\begin{table}
+  \small
+  \caption{Temporal Fairness Metrics of ABCInML by Model. M = monthly (forecast window = 3), W = weekly (forecast window = 5).}
+  \label{tab:temporal-abcinml-models-combined}
+  \begin{tabular}{lrrrrrr}
+    \toprule
+     & \multicolumn{2}{c}{Max. Bias $\downarrow$} & \multicolumn{2}{c}{Temporal Stability $\downarrow$} & \multicolumn{2}{c}{Max. Bias Diff. $\downarrow$} \\
+    \cmidrule(lr){2-3} \cmidrule(lr){4-5} \cmidrule(lr){6-7}
+    Model & M & W & M & W & M & W \\
+    \midrule
+    Logistic Regression & 9.13\% & 9.95\% & 1.17\% & 1.12\% & 5.00\% & 8.65\% \\
+    XGBoost & 9.15\% & 14.40\% & 1.26\% & 1.04\% & 6.06\% & 10.94\% \\
+    Random Forest & \textbf{7.58\%} & \textbf{7.13\%} & \textbf{0.80\%} & \textbf{0.74\%} & \textbf{2.98\%} & \textbf{4.86\%} \\
+    \bottomrule
+  \end{tabular}
+\end{table}

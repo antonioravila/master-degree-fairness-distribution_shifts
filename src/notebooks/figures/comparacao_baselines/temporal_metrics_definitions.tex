@@ -1,0 +1,24 @@
+% Temporal fairness metrics, as in Almuzaini et al. (2022) -- add your \cite key for [1] where marked.
+Following the original ABCInML evaluation protocol, three temporal fairness metrics are computed over the
+sequence of Demographic Parity differences of a run, $DP_1, \dots, DP_T$, one value per batch. Each run
+yields a single value per metric, and for all three lower values are better:
+
+\begin{itemize}
+  \item \textbf{Maximum Bias}: the worst fairness level reached over time, i.e.\ the peak of the bias,
+    \begin{equation}
+      \mathrm{MB} = \max_{t} \lvert DP_t \rvert .
+    \end{equation}
+  \item \textbf{Temporal Stability}: the average change in bias between consecutive batches, measuring how much
+    fairness oscillates over time,
+    \begin{equation}
+      \mathrm{TS} = \frac{1}{T-1} \sum_{t=2}^{T} \lvert DP_t - DP_{t-1} \rvert .
+    \end{equation}
+  \item \textbf{Maximum Bias Difference}: the largest jump in bias between two consecutive batches, capturing the
+    most abrupt change,
+    \begin{equation}
+      \mathrm{MBD} = \max_{t \geq 2} \lvert DP_t - DP_{t-1} \rvert .
+    \end{equation}
+\end{itemize}
+
+Maximum Bias captures how severe the bias becomes, while Temporal Stability and Maximum Bias Difference capture how
+unstable it is over time.

@@ -1,59 +1,38 @@
-# Missing baseline folders for scenarios run_parallel.py considers complete (LR and XGBoost).
-# 8 vanilla/static folders (group A) + 32 dynamic folders (7 come from group A, 25 from group B).
+# Baseline folders still missing for scenarios run_parallel.py considers complete (status on 2026-10-12).
+# Of the original 40, 34 were generated (commits 644e3fa / 66b81b9). The 6 left are below.
 # Run from the repository root, one command at a time (XGBoost uses the GPU).
 # Valid PowerShell: rename to .ps1 to run it as a script.
 
 # ---------------------------------------------------------------------------
-# Group A: vanilla + static (and dynamic, train_window none).
-# --baseline_type all is the only mode that generates vanilla AND static together;
-# --alpha 0.55 points the extra abcinml run at an alpha that does not exist,
-# so no committed result is overwritten. Those 0.55 runs are deleted below.
+# Step 1: the 5 missing dynamic folders (monthly, forecast window 5).
 # ---------------------------------------------------------------------------
-uv run python src/main.py --model_name logistic_regression --batch_type monthly --forecast_window 5 --fairness_correction adaptative_rw --baseline_type all --alpha 0.55
-uv run python src/main.py --model_name logistic_regression --batch_type monthly --forecast_window 5 --baseline_type all --alpha 0.55
-uv run python src/main.py --model_name logistic_regression --batch_type monthly --forecast_window 10 --baseline_type all --alpha 0.55
-uv run python src/main.py --model_name logistic_regression --batch_type weekly --forecast_window 10 --baseline_type all --alpha 0.55
-uv run python src/main.py --model_name xgboost --batch_type monthly --forecast_window 5 --baseline_type all --alpha 0.55
-uv run python src/main.py --model_name xgboost --batch_type monthly --forecast_window 10 --baseline_type all --alpha 0.55
-uv run python src/main.py --model_name xgboost --batch_type weekly --forecast_window 5 --baseline_type all --alpha 0.55
-uv run python src/main.py --model_name xgboost --batch_type weekly --forecast_window 10 --baseline_type all --alpha 0.55
+uv run python src/main.py --model_name logistic_regression --batch_type monthly --forecast_window 5 --baseline_type dynamic --train_window 3
+uv run python src/main.py --model_name logistic_regression --batch_type monthly --forecast_window 5 --baseline_type dynamic --train_window 6
+uv run python src/main.py --model_name xgboost --batch_type monthly --forecast_window 5 --baseline_type dynamic --train_window 3
+uv run python src/main.py --model_name xgboost --batch_type monthly --forecast_window 5 --baseline_type dynamic --train_window 6
+uv run python src/main.py --model_name xgboost --batch_type monthly --forecast_window 5 --baseline_type dynamic --train_window 12
 
 # ---------------------------------------------------------------------------
-# Right after group A: delete the alpha 0.55 runs, otherwise the concatenation
-# includes them and they contaminate the means across alphas.
+# Step 2 (optional, slow): vanilla + static for LR with APR, monthly, forecast window 5.
+# --baseline_type all is the only mode that generates vanilla AND static together;
+# --alpha 0.55 points the extra abcinml run at an alpha that does not exist, so no
+# committed result is overwritten. The APR abcinml run takes ~3 min per batch
+# (a few hours). Skip this step if the APR comparison is not going into the article.
+# ---------------------------------------------------------------------------
+uv run python src/main.py --model_name logistic_regression --batch_type monthly --forecast_window 5 --fairness_correction adaptative_rw --baseline_type all --alpha 0.55
+
+# ---------------------------------------------------------------------------
+# Step 3: delete ALL alpha 0.55 runs, otherwise the concatenation includes them
+# and they contaminate the means across alphas. Besides the one from step 2, this
+# also removes the 3 committed in 644e3fa, which were never cleaned up:
+#   logistic_regression_alpha_0.55_sma_window_10_weekly_kamiran_rw_trainwindow_none
+#   xgboost_alpha_0.55_sma_window_10_weekly_kamiran_rw_trainwindow_none
+#   xgboost_alpha_0.55_sma_window_5_weekly_kamiran_rw_trainwindow_none
+# Run this step even if you skip step 2.
 # ---------------------------------------------------------------------------
 Remove-Item -Recurse src\results\IDADE_BIN\*_alpha_0.55_*, src\figures\IDADE_BIN\*_alpha_0.55_*
 
 # ---------------------------------------------------------------------------
-# Group B: the remaining 25 dynamic folders.
-# ---------------------------------------------------------------------------
-uv run python src/main.py --model_name logistic_regression --batch_type monthly --forecast_window 5 --baseline_type dynamic --train_window 3
-uv run python src/main.py --model_name logistic_regression --batch_type monthly --forecast_window 5 --baseline_type dynamic --train_window 6
-uv run python src/main.py --model_name logistic_regression --batch_type monthly --forecast_window 5 --baseline_type dynamic --train_window 12
-uv run python src/main.py --model_name logistic_regression --batch_type monthly --forecast_window 10 --baseline_type dynamic --train_window 3
-uv run python src/main.py --model_name logistic_regression --batch_type monthly --forecast_window 10 --baseline_type dynamic --train_window 6
-uv run python src/main.py --model_name logistic_regression --batch_type monthly --forecast_window 10 --baseline_type dynamic --train_window 12
-uv run python src/main.py --model_name logistic_regression --batch_type weekly --forecast_window 3 --baseline_type dynamic
-uv run python src/main.py --model_name logistic_regression --batch_type weekly --forecast_window 5 --baseline_type dynamic --train_window 3
-uv run python src/main.py --model_name logistic_regression --batch_type weekly --forecast_window 5 --baseline_type dynamic --train_window 6
-uv run python src/main.py --model_name logistic_regression --batch_type weekly --forecast_window 5 --baseline_type dynamic --train_window 12
-uv run python src/main.py --model_name logistic_regression --batch_type weekly --forecast_window 10 --baseline_type dynamic --train_window 3
-uv run python src/main.py --model_name logistic_regression --batch_type weekly --forecast_window 10 --baseline_type dynamic --train_window 6
-uv run python src/main.py --model_name logistic_regression --batch_type weekly --forecast_window 10 --baseline_type dynamic --train_window 12
-uv run python src/main.py --model_name xgboost --batch_type monthly --forecast_window 5 --baseline_type dynamic --train_window 3
-uv run python src/main.py --model_name xgboost --batch_type monthly --forecast_window 5 --baseline_type dynamic --train_window 6
-uv run python src/main.py --model_name xgboost --batch_type monthly --forecast_window 5 --baseline_type dynamic --train_window 12
-uv run python src/main.py --model_name xgboost --batch_type monthly --forecast_window 10 --baseline_type dynamic --train_window 3
-uv run python src/main.py --model_name xgboost --batch_type monthly --forecast_window 10 --baseline_type dynamic --train_window 6
-uv run python src/main.py --model_name xgboost --batch_type monthly --forecast_window 10 --baseline_type dynamic --train_window 12
-uv run python src/main.py --model_name xgboost --batch_type weekly --forecast_window 5 --baseline_type dynamic --train_window 3
-uv run python src/main.py --model_name xgboost --batch_type weekly --forecast_window 5 --baseline_type dynamic --train_window 6
-uv run python src/main.py --model_name xgboost --batch_type weekly --forecast_window 5 --baseline_type dynamic --train_window 12
-uv run python src/main.py --model_name xgboost --batch_type weekly --forecast_window 10 --baseline_type dynamic --train_window 3
-uv run python src/main.py --model_name xgboost --batch_type weekly --forecast_window 10 --baseline_type dynamic --train_window 6
-uv run python src/main.py --model_name xgboost --batch_type weekly --forecast_window 10 --baseline_type dynamic --train_window 12
-
-# ---------------------------------------------------------------------------
-# Afterwards: rebuild the aggregate, then rerun 02_comparacao_baselines_kamiran.ipynb.
+# Step 4: rebuild the aggregate, then rerun 02_comparacao_baselines_kamiran.ipynb.
 # ---------------------------------------------------------------------------
 uv run python src/tools/concatenate_results.py

@@ -67,7 +67,7 @@ src/
 │   ├── migrate_legacy_schema.py       # One-off: migrate pre-APR result CSVs/folders
 │   ├── migrate_train_window_schema.py # One-off: migrate pre-train_window result folders
 │   └── migrate_forecast_window_schema.py  # One-off: backfill _fw_{window} folder suffix
-├── notebooks/                 # Exploratory analysis (EDA, seminar figures)
+├── notebooks/                 # Exploratory analysis (EDA, seminar figures) + 03_artigo_figuras_tabelas (paper)
 ├── figures/                   # Generated charts (gitignored)
 └── results/                   # Generated CSVs (committed)
 run_parallel.py                # Runs the full experiment grid across processes
@@ -544,6 +544,12 @@ All scripts live in `src/tools/` and are run with `uv run python src/tools/<scri
 | `migrate_train_window_schema.py` | One-off migration: splits legacy `baseline_non_abc_*` folders into separate `vanilla`/`static` vs. `dynamic` folders and appends the `_trainwindow_none` suffix everywhere, for results produced before `--train_window` existed. |
 | `migrate_forecast_window_schema.py` | One-off migration: backfills the `_fw_{forecast_window}` suffix onto existing `baseline_non_abc_*`/`baseline_dynamic_*` folders. |
 | `migrate_add_eq_odds_diff.py` | Adds/recomputes `eq_odds_diff = max(tpr_diff, fpr_diff)` in every `assessment_all_baselines.csv` under `src/results/` (including `all/`), without retraining. Idempotent — rerun it on results produced by older code. `--dry-run` lists the files without writing. |
+
+### Paper figures and tables
+
+`src/notebooks/03_artigo_figuras_tabelas.ipynb` regenerates every code-generated figure (Figs. 1–10) and table (Tabs. 3–6) of the paper, in paper order, into `src/notebooks/figures/artigo/` (`figNN_*.png`, `tabNN_*.tex`). It reads `src/results/all/` (filtered to `kamiran_rw`, `train_window = none`), `src/results/forecast_quality/IDADE_BIN/`, and — for Figs. 1–2 only — the raw SRAG parquets; set `RUN_EDA = False` in the setup cell to skip those two. Fig. 3 calls `vanilla_shift_chart.build_chart`. Run `concatenate_results.py` first so `src/results/all/` is up to date.
+
+Items whose original has separate monthly and weekly panels/blocks also get a compact `*b_*_combined` variant (Figs. 5–10, Tabs. 3, 5, 6): Figs. 5–7 and Tab. 3 average the monthly and weekly values (equal weight per batch type); Fig. 8 is a single 4-row heatmap; Figs. 9–10 overlay both batch types on a real date axis (monthly batches placed mid-month; Fig. 10b uses a 5-month / 20-week moving average); Tabs. 5–6 put monthly and weekly side by side, since Temporal Stability and Max. Bias Difference are per-batch-step quantities and not comparable across granularities. See `docs/batch_combinado_plan.md`.
 
 ---
 
