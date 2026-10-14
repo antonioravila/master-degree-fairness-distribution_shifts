@@ -1,0 +1,16 @@
+\begin{table}
+  \small
+  \caption{Forecast error (MAE $\downarrow$) of the SMA and EMA forecasters by epidemiological period. MAE is the mean absolute error between the forecasted and the observed joint proportions $p(S,Y)$, averaged over batches, over the four $(S,Y)$ cells and over forecast windows $\{3,5,10\}$; EMA uses $\alpha=0.3$. Best forecaster per batch type in bold.}
+  \label{tab:forecast-mae-period}
+  \begin{tabular}{llrrrrrr}
+    \toprule
+    Batch type & Forecaster & Pre-pandemic & Acute 1 & Acute 2 & Transition & Endemic & Overall \\
+    \midrule
+    Monthly & SMA & 0.0229 & 0.0503 & 0.0532 & 0.0383 & 0.0257 & 0.0382 \\
+     & EMA & \textbf{0.0205} & \textbf{0.0444} & \textbf{0.0514} & \textbf{0.0337} & \textbf{0.0226} & \textbf{0.0344} \\
+    \midrule
+    Weekly & SMA & 0.0193 & 0.0215 & 0.0365 & 0.0186 & 0.0161 & 0.0212 \\
+     & EMA & \textbf{0.0176} & \textbf{0.0192} & \textbf{0.0322} & \textbf{0.0166} & \textbf{0.0141} & \textbf{0.0189} \\
+    \bottomrule
+  \end{tabular}
+\end{table}
