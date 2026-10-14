@@ -1,0 +1,20 @@
+\begin{table}
+  \small
+  \caption{ABCInML fairness by forecasting technique (forecast window = 5; mean of monthly and weekly batches). $p$: paired Wilcoxon signed-rank test against SMA over the same batches. Best mean per model in bold.}
+  \label{tab:forecasting-fairness}
+  \begin{tabular}{llrrrrrr}
+    \toprule
+     & & \multicolumn{2}{c}{DP Diff. $\downarrow$} & \multicolumn{2}{c}{TPR Diff. $\downarrow$} & \multicolumn{2}{c}{FPR Diff. $\downarrow$} \\
+    \cmidrule(lr){3-4} \cmidrule(lr){5-6} \cmidrule(lr){7-8}
+    Model & Technique & Mean & $p$ & Mean & $p$ & Mean & $p$ \\
+    \midrule
+    Logistic Regression & SMA & \textbf{4.01\%} & nan & \textbf{13.38\%} & nan & 0.83\% & nan \\
+     & EMA & 4.04\% & 0.185 & 13.41\% & 0.565 & \textbf{0.82\%} & 0.076 \\
+     & Oracle & 4.05\% & 0.540 & 13.47\% & 0.708 & 0.85\% & 0.063 \\
+    \midrule
+    XGBoost & SMA & 3.30\% & nan & \textbf{18.61\%} & nan & 1.02\% & nan \\
+     & EMA & \textbf{3.27\%} & 0.153 & 18.70\% & 0.560 & \textbf{0.96\%} & $<$0.001 \\
+     & Oracle & 3.30\% & 0.339 & 18.78\% & 0.339 & 0.99\% & 0.065 \\
+    \bottomrule
+  \end{tabular}
+\end{table}
