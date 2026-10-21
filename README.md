@@ -565,6 +565,8 @@ All scripts live in `src/tools/` and are run with `uv run python src/tools/<scri
 | Tab. 8 | `tab08b_mae_by_period.tex` | Forecast MAE of SMA and EMA by period |
 | Tab. 9 | `tab10f_forecast_error_vs_fairness.tex` | Forecast MAE and ABCInML fairness for SMA / EMA / Oracle (LR and XGBoost) |
 
+Section 5 of the notebook (*Dataset analytics*, for the Dataset Review) also writes `tabds01`–`tabds07` (overview, preprocessing funnel, profile by period, missing values, feature shift, selection by year, proxy correlations) and `figds01_records_per_batch.png`; the raw-data part runs only with `RUN_EDA = True`, the rest reads the preprocessing cache. See `docs/dataset_analytics_opcoes.md`.
+
 Tabs. 1–2 of the paper are written by hand. Where the numbers of the paper must be refreshed after new results, see `docs/atualizacao_dados_2026-10-20.md`.
 
 ---
