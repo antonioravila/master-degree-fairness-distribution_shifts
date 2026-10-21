@@ -547,9 +547,25 @@ All scripts live in `src/tools/` and are run with `uv run python src/tools/<scri
 
 ### Paper figures and tables
 
-`src/notebooks/03_artigo_figuras_tabelas.ipynb` regenerates every code-generated figure (Figs. 1–10) and table (Tabs. 3–6) of the paper, in paper order, into `src/notebooks/figures/artigo/` (`figNN_*.png`, `tabNN_*.tex`). It reads `src/results/all/` (filtered to `kamiran_rw`, `train_window = none`), `src/results/forecast_quality/IDADE_BIN/`, and — for Figs. 1–2 only — the raw SRAG parquets; set `RUN_EDA = False` in the setup cell to skip those two. Fig. 3 calls `vanilla_shift_chart.build_chart`. Run `concatenate_results.py` first so `src/results/all/` is up to date.
+`src/notebooks/03_artigo_figuras_tabelas.ipynb` generates **only** the figures and tables that appear in the paper (Oct/2026 version), into `src/notebooks/figures/artigo/`. It reads `src/results/all/` (filtered to `kamiran_rw`, `train_window = none`, a single `FORECAST_WINDOW = 5` for every item), `src/results/forecast_quality/IDADE_BIN/` and, for Figs. 1–2 only, the raw SRAG parquets (`RUN_EDA = False` skips them). Run `concatenate_results.py` first so `src/results/all/` is up to date. A single forecast window is used because vanilla/static are trained once on the first post-warm-up batch, which depends on the window.
 
-Items whose original has separate monthly and weekly panels/blocks also get a compact `*b_*_combined` variant (Figs. 5–10, Tabs. 3, 5, 6): Figs. 5–7 and Tab. 3 average the monthly and weekly values (equal weight per batch type), and `fig05c_*` puts the three combined frontiers side by side as square panels; Fig. 8 is a single 4-row heatmap; Figs. 9–10 overlay both batch types on a real date axis (monthly batches placed mid-month; Fig. 10b uses a 5-month / 20-week moving average); Tabs. 5–6 put monthly and weekly side by side, since Temporal Stability and Max. Bias Difference are per-batch-step quantities and not comparable across granularities. See `docs/batch_combinado_plan.md`. `fig04c_*` extends Fig. 4 to LR, XGBoost and RF in one 3×3 grid (rows = DP / TPR / FPR, columns = models, square panels, y shared per metric row), with monthly and weekly averaged per calendar month at a single forecast window (`FW_FIG4C = 5`) — vanilla/static are trained once on the first post-warm-up batch, which depends on the forecast window, so mixing windows would mix different reference models (`docs/fig4_modelos_plan.md`).
+| Paper | File | Content |
+|---|---|---|
+| Fig. 1 | `fig01_cfr_temporal.png` | Weekly case fatality rate |
+| Fig. 2 | `fig02b_age_period_local_scale.png` | Cases / deaths / fatality by age and period; top part shares the y-axis per row, gray bottom part has a free local y-axis |
+| Fig. 3 | `fig03_vanilla_lr.png` | Vanilla LR under distribution shift |
+| Fig. 4 | `fig04_baselines_lr.png` | The 4 baselines (LR) |
+| Fig. 5 | `fig05c_frontier_dp_tpr_fpr_combined.png` | Accuracy × DP / TPR / FPR across α, LR × XGBoost × RF (monthly and weekly averaged) |
+| Fig. 6 | `fig09b_forecast_vs_real_combined.png` | EMA forecast × real proportions |
+| Tab. 3 | `tab03b_absolute_rates_lr_combined.tex` | Absolute TPR / FPR by baseline and group (LR) |
+| Tab. 4 | `tab04_alpha_lr.tex` | α sweep (LR, monthly) |
+| Tab. 5 | `tab05b_temporal_lr_combined.tex` | Temporal metrics (LR), monthly and weekly side by side |
+| Tab. 6 | `tab06c_baselines_models.tex` | 4 baselines × 3 models, DP reduction vs. vanilla, ABCInML − Dynamic |
+| Tab. 7 | `tab05c_temporal_baselines_models.tex` | Temporal metrics, 4 baselines × 3 models |
+| Tab. 8 | `tab08b_mae_by_period.tex` | Forecast MAE of SMA and EMA by period |
+| Tab. 9 | `tab10f_forecast_error_vs_fairness.tex` | Forecast MAE and ABCInML fairness for SMA / EMA / Oracle (LR and XGBoost) |
+
+Tabs. 1–2 of the paper are written by hand. Where the numbers of the paper must be refreshed after new results, see `docs/atualizacao_dados_2026-10-20.md`.
 
 ---
 
