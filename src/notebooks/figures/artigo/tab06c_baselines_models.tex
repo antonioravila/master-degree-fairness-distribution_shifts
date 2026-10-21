@@ -1,10 +1,10 @@
 \begin{table}
   \small
-  \caption{Baselines by model (forecast window = 5; mean of monthly and weekly batches; ABCInML = mean over $\alpha$). TPR, FPR and DP are differences between groups. DP red.: reduction of DP relative to Vanilla. Last row of each block: ABCInML $-$ Dynamic in percentage points. Best per model in bold.}
+  \caption{Baselines by model (forecast window = 5; mean of monthly and weekly batches; ABCInML = mean over $\alpha$). $\Delta$SP, $\Delta$TPR and $\Delta$FPR are differences between groups. $\Delta$SP red.: reduction of $\Delta$SP relative to Vanilla. Last row of each block: ABCInML $-$ Dynamic in percentage points. Best per model in bold.}
   \label{tab:baselines-models}
   \begin{tabular}{llrrrrrr}
     \toprule
-    Model & Baseline & Accuracy $\uparrow$ & AUC-ROC $\uparrow$ & DP $\downarrow$ & TPR $\downarrow$ & FPR $\downarrow$ & DP red. $\uparrow$ \\
+    Model & Baseline & Accuracy $\uparrow$ & AUC-ROC $\uparrow$ & $\Delta$SP $\downarrow$ & $\Delta$TPR $\downarrow$ & $\Delta$FPR $\downarrow$ & $\Delta$SP red. $\uparrow$ \\
     \midrule
     Logistic Regression & Vanilla & 84.32\% & 79.99\% & 21.97\% & 18.58\% & 16.32\% & -- \\
      & Static & 84.31\% & 75.49\% & 7.02\% & \textbf{8.86\%} & 4.11\% & 68.1\% \\
