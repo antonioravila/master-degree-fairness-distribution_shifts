@@ -1,0 +1,27 @@
+\begin{table}
+  \small
+  \caption{Temporal fairness metrics ($\Delta$SP) by baseline and model (forecast window = 5; ABCInML = mean over $\alpha$). M = monthly, W = weekly. Best per model and column in bold.}
+  \label{tab:temporal-baselines-models}
+  \begin{tabular}{llrrrrrr}
+    \toprule
+     & & \multicolumn{2}{c}{MB $\downarrow$} & \multicolumn{2}{c}{TS $\downarrow$} & \multicolumn{2}{c}{$\Delta$MB $\downarrow$} \\
+    \cmidrule(lr){3-4} \cmidrule(lr){5-6} \cmidrule(lr){7-8}
+    Model & Baseline & M & W & M & W & M & W \\
+    \midrule
+    Logistic Regression & Vanilla & 24.54\% & 36.42\% & 1.25\% & 1.95\% & 6.24\% & 24.94\% \\
+     & Static & \textbf{7.43\%} & 18.12\% & 1.04\% & 1.55\% & 5.80\% & 10.99\% \\
+     & Dynamic & 8.25\% & 10.97\% & \textbf{0.96\%} & 1.13\% & 4.78\% & \textbf{8.14\%} \\
+     & ABCInML & 7.98\% & \textbf{9.95\%} & 1.01\% & \textbf{1.12\%} & \textbf{4.66\%} & 8.65\% \\
+    \midrule
+    XGBoost & Vanilla & 26.78\% & 32.27\% & 1.67\% & 1.88\% & 10.83\% & 16.09\% \\
+     & Static & 14.48\% & 19.53\% & 1.52\% & 1.77\% & 10.70\% & 13.79\% \\
+     & Dynamic & 8.28\% & \textbf{10.98\%} & 1.08\% & 1.05\% & \textbf{4.10\%} & \textbf{8.13\%} \\
+     & ABCInML & \textbf{7.78\%} & 14.40\% & \textbf{1.06\%} & \textbf{1.04\%} & 4.87\% & 10.94\% \\
+    \midrule
+    Random Forest & Vanilla & 16.53\% & 19.19\% & 1.12\% & 1.24\% & 7.90\% & 12.09\% \\
+     & Static & \textbf{4.89\%} & 14.12\% & \textbf{0.57\%} & 1.12\% & 3.73\% & 10.72\% \\
+     & Dynamic & 6.88\% & 7.42\% & 0.79\% & 0.81\% & \textbf{2.67\%} & 7.17\% \\
+     & ABCInML & 6.68\% & \textbf{7.13\%} & 0.76\% & \textbf{0.74\%} & 2.86\% & \textbf{4.86\%} \\
+    \bottomrule
+  \end{tabular}
+\end{table}

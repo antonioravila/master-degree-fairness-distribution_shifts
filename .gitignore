@@ -6,3 +6,4 @@ env/
 *.vscode
 .venv/*
 *.log
+src/figures/

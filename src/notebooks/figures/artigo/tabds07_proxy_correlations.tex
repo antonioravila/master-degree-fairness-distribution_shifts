@@ -1,0 +1,16 @@
+\begin{table}
+  \small
+  \caption{Features most correlated (absolute Pearson) with the sensitive attribute (age $\geq$ 65) and with the target.}
+  \label{tab:proxy-correlations}
+  \begin{tabular}{lrlr}
+    \toprule
+    Sensitive attribute & $|r|$ & Target (death) & $|r|$ \\
+    \midrule
+    \texttt{CARDIOPATI} & 0.34 & \texttt{UTI} & 0.29 \\
+    \texttt{FATOR\_RISC} & 0.32 & \texttt{CLASSI\_FIN\_5} & 0.24 \\
+    \texttt{DIABETES} & 0.23 & \texttt{FATOR\_RISC} & 0.20 \\
+    \texttt{VACINA\_COV} & 0.20 & \texttt{CARDIOPATI} & 0.17 \\
+    \texttt{CLASSI\_FIN\_2} & 0.17 & \texttt{SUPORT\_VEN\_3} & 0.16 \\
+    \bottomrule
+  \end{tabular}
+\end{table}

@@ -1,0 +1,23 @@
+\begin{table}
+  \caption{Temporal Fairness Metrics by Baseline - Logistic Regression.}
+  \label{tab:temporal-lr}
+  \begin{tabular}{lrrr}
+    \toprule
+    Baseline & Max. Bias $\downarrow$ & Temporal Stability $\downarrow$ & Max. Bias Diff. $\downarrow$ \\
+    \midrule
+    \multicolumn{4}{c}{\textit{batch type = monthly, forecast window = 3}} \\
+    \midrule
+    vanilla & 33.73\% & 1.29\% & 7.66\% \\
+    static & 10.10\% & 1.14\% & 6.19\% \\
+    dynamic & \textbf{8.25\%} & \textbf{0.99\%} & \textbf{4.78\%} \\
+    abcinml & 9.13\% & 1.17\% & 5.00\% \\
+    \midrule
+    \multicolumn{4}{c}{\textit{batch type = weekly, forecast window = 5}} \\
+    \midrule
+    vanilla & 36.42\% & 1.95\% & 24.94\% \\
+    static & 18.12\% & 1.55\% & 10.99\% \\
+    dynamic & 10.97\% & 1.13\% & \textbf{8.14\%} \\
+    abcinml & \textbf{9.95\%} & \textbf{1.12\%} & 8.65\% \\
+    \bottomrule
+  \end{tabular}
+\end{table}

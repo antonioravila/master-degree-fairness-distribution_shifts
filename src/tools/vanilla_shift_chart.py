@@ -31,9 +31,9 @@ from utils.metrics_utils import (
 )
 
 _FAIRNESS_METRICS = [
-    ('sp', 'Demographic Parity Diff.'),
-    ('tpr', 'TPR Difference'),
-    ('fpr', 'FPR Difference'),
+    ('dp', 'Demographic Parity Diff.'),
+    ('tpr_diff', 'TPR Difference'),
+    ('fpr_diff', 'FPR Difference'),
 ]
 
 _PERIOD_LABELS_EN = {
@@ -47,9 +47,9 @@ _PERIOD_LABELS_EN = {
 _VANILLA_COLOR = _BASELINE_COLORS['vanilla']
 
 
-def _load_vanilla(model_name: str, sensitive_attribute: str, batch_type: str) -> pd.DataFrame:
-    folder = metrics_utils.baseline_non_abc_folder_name(model_name, batch_type)
-    path = Path('src') / 'results' / sensitive_attribute / folder / 'assessment_all_baselines.csv'
+def _load_vanilla(model_name: str, sensitive_attribute: str, batch_type: str, forecast_window: int) -> pd.DataFrame:
+    folder = metrics_utils.baseline_non_abc_folder_name(model_name, batch_type, forecast_window=forecast_window)
+    path = _SRC / 'results' / sensitive_attribute / folder / 'assessment_all_baselines.csv'
     if not path.exists():
         raise FileNotFoundError(
             f'{path} not found — run baseline_type=vanilla for batch_type={batch_type} first.'
@@ -112,11 +112,12 @@ def _plot_row(axes, df: pd.DataFrame, batch_type: str, ma_window: int):
 def build_chart(
     sensitive_attribute: str,
     model_name: str,
+    forecast_window: int,
     ma_window_monthly: int = 5,
     ma_window_weekly: int = 20,
 ) -> plt.Figure:
-    monthly_df = _load_vanilla(model_name, sensitive_attribute, 'monthly')
-    weekly_df = _load_vanilla(model_name, sensitive_attribute, 'weekly')
+    monthly_df = _load_vanilla(model_name, sensitive_attribute, 'monthly', forecast_window)
+    weekly_df = _load_vanilla(model_name, sensitive_attribute, 'weekly', forecast_window)
 
     fig = plt.figure(figsize=(18, 13), layout='constrained')
     subfigs = fig.subfigures(2, 1)
@@ -160,10 +161,11 @@ def build_chart(
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--sensitive_attribute', default='IDADE_BIN', choices=['CS_RACA', 'IDADE_BIN'])
-    parser.add_argument('--model_name', default='logistic_regression', choices=['logistic_regression', 'xgboost'])
+    parser.add_argument('--model_name', default='logistic_regression', choices=['logistic_regression', 'xgboost', 'random_forest', 'lightgbm'])
+    parser.add_argument('--forecast_window', type=int, default=3, help='Selects which baseline_non_abc_*_fw_{n} folder to read.')
     args = parser.parse_args()
 
-    fig = build_chart(args.sensitive_attribute, args.model_name)
+    fig = build_chart(args.sensitive_attribute, args.model_name, args.forecast_window)
 
     out_dir = Path('src') / 'figures' / args.sensitive_attribute
     out_dir.mkdir(parents=True, exist_ok=True)

@@ -1,0 +1,28 @@
+\begin{table}
+  \small
+  \caption{Baselines by model (forecast window = 5; mean of monthly and weekly batches; ABCInML = mean over $\alpha$). $\Delta$SP, $\Delta$TPR and $\Delta$FPR are differences between groups. $\Delta$SP red.: reduction of $\Delta$SP relative to Vanilla. Last row of each block: ABCInML $-$ Dynamic in percentage points. Best per model in bold.}
+  \label{tab:baselines-models}
+  \begin{tabular}{llrrrrrr}
+    \toprule
+    Model & Baseline & Accuracy $\uparrow$ & AUC-ROC $\uparrow$ & $\Delta$SP $\downarrow$ & $\Delta$TPR $\downarrow$ & $\Delta$FPR $\downarrow$ & $\Delta$SP red. $\uparrow$ \\
+    \midrule
+    Logistic Regression & Vanilla & 84.32\% & 79.99\% & 21.97\% & 18.58\% & 16.32\% & -- \\
+     & Static & 84.31\% & 75.49\% & 7.02\% & \textbf{8.86\%} & 4.11\% & 68.1\% \\
+     & Dynamic & \textbf{86.75\%} & \textbf{80.30\%} & 4.76\% & 10.39\% & 0.95\% & 78.3\% \\
+     & ABCInML & 86.63\% & 79.14\% & \textbf{4.01\%} & 13.38\% & \textbf{0.83\%} & 81.8\% \\
+     & ABCInML $-$ Dynamic & -0.12 & -1.16 & -0.75 & +2.99 & -0.12 & \\
+    \midrule
+    XGBoost & Vanilla & 82.72\% & 77.93\% & 17.91\% & 8.44\% & 13.24\% & -- \\
+     & Static & 82.64\% & 76.65\% & 9.27\% & \textbf{6.58\%} & 6.15\% & 48.2\% \\
+     & Dynamic & \textbf{87.01\%} & \textbf{83.91\%} & 4.11\% & 14.77\% & \textbf{0.93\%} & 77.1\% \\
+     & ABCInML & 86.83\% & 83.17\% & \textbf{3.30\%} & 18.61\% & 1.02\% & 81.6\% \\
+     & ABCInML $-$ Dynamic & -0.17 & -0.74 & -0.81 & +3.84 & +0.09 & \\
+    \midrule
+    Random Forest & Vanilla & 86.08\% & 82.47\% & 9.08\% & 11.66\% & 4.15\% & -- \\
+     & Static & 85.58\% & 80.73\% & 3.49\% & \textbf{3.17\%} & 1.32\% & 61.6\% \\
+     & Dynamic & \textbf{86.95\%} & \textbf{83.51\%} & 2.74\% & 10.26\% & \textbf{0.53\%} & 69.8\% \\
+     & ABCInML & 86.86\% & 82.77\% & \textbf{2.36\%} & 13.13\% & 0.61\% & 74.1\% \\
+     & ABCInML $-$ Dynamic & -0.10 & -0.74 & -0.39 & +2.88 & +0.08 & \\
+    \bottomrule
+  \end{tabular}
+\end{table}

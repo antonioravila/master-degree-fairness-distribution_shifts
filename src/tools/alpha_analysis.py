@@ -20,9 +20,9 @@ _DEFAULT_OUTPUT = os.path.join(os.path.dirname(__file__), 'alpha_analysis.png')
 _METRICS = {
     'acc': 'Accuracy',
     'auc': 'AUC',
-    'sp': 'Dem. Parity Diff.',
-    'tpr': 'TPR Difference',
-    'fpr': 'FPR Difference',
+    'dp': 'Dem. Parity Diff.',
+    'tpr_diff': 'TPR Difference',
+    'fpr_diff': 'FPR Difference',
 }
 
 _STAT_LABELS = {
@@ -50,6 +50,15 @@ def _load_abcinml(results_dir: str) -> pd.DataFrame:
         raise KeyError(
             "'model_name' column not found. Run src/tools/concatenate_results.py first."
         )
+    # This script's groupby('alpha') silently mixes rows across any other axis
+    # that varies (fairness_correction, train_window) — warn instead of failing,
+    # since older aggregates may not have these columns at all.
+    for col in ('fairness_correction', 'train_window'):
+        if col in df.columns and df[col].nunique(dropna=False) > 1:
+            print(
+                f"Warning: multiple distinct '{col}' values found "
+                f'({sorted(df[col].astype(str).unique())}) — the tables below mix them.'
+            )
     return df
 
 

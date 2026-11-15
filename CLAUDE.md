@@ -1,90 +1,83 @@
+
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+Behavioral guidelines to reduce common LLM coding mistakes. Merge with project-specific instructions as needed.
 
-## Commands
+**Tradeoff:** These guidelines bias toward caution over speed. For trivial tasks, use judgment.
 
-```bash
-# Run the experiment
-uv run python src/main.py --baseline_type abcinml --sensitive_attribute CS_RACA --target_label EVOLUCAO --window_column YEAR-MONTH --model_name logistic_regression
+## 1. Think Before Coding
 
-# Run all baselines at once
-uv run python src/main.py --baseline_type all --sensitive_attribute CS_RACA --target_label EVOLUCAO --window_column YEAR-MONTH --model_name logistic_regression
+**Don't assume. Don't hide confusion. Surface tradeoffs.**
 
-# Lint
-uv run ruff check src/
+Before implementing:
+- State your assumptions explicitly. If uncertain, ask.
+- If multiple interpretations exist, present them - don't pick silently.
+- If a simpler approach exists, say so. Push back when warranted.
+- If something is unclear, stop. Name what's confusing. Ask.
 
-# Format
-uv run ruff format src/
+## 2. Simplicity First
+
+**Minimum code that solves the problem. Nothing speculative.**
+
+- No features beyond what was asked.
+- No abstractions for single-use code.
+- No "flexibility" or "configurability" that wasn't requested.
+- No error handling for impossible scenarios.
+- If you write 200 lines and it could be 50, rewrite it.
+
+Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+
+## 3. Surgical Changes
+
+**Touch only what you must. Clean up only your own mess.**
+
+When editing existing code:
+- Don't "improve" adjacent code, comments, or formatting.
+- Don't refactor things that aren't broken.
+- Match existing style, even if you'd do it differently.
+- If you notice unrelated dead code, mention it - don't delete it.
+
+When your changes create orphans:
+- Remove imports/variables/functions that YOUR changes made unused.
+- Don't remove pre-existing dead code unless asked.
+
+The test: Every changed line should trace directly to the user's request.
+
+## 4. Goal-Driven Execution
+
+**Define success criteria. Loop until verified.**
+
+Transform tasks into verifiable goals:
+- "Add validation" → "Write tests for invalid inputs, then make them pass"
+- "Fix the bug" → "Write a test that reproduces it, then make it pass"
+- "Refactor X" → "Ensure tests pass before and after"
+
+For multi-step tasks, state a brief plan:
+```
+1. [Step] → verify: [check]
+2. [Step] → verify: [check]
+3. [Step] → verify: [check]
 ```
 
-**CLI arguments:**
-- `--baseline_type`: `vanilla`, `static`, `dynamic`, `abcinml`, or `all`
-- `--sensitive_attribute`: `CS_RACA` (race) or `IDADE_BIN` (age)
-- `--target_label`: `EVOLUCAO`
-- `--window_column`: `YEAR-MONTH`
-- `--model_name`: `logistic_regression` or `xgboost`
-- `--alpha`: float 0–1 (default: runs all [0, 0.1, ..., 1.0]); pass a single value (e.g. `--alpha 0.5`) for faster iteration during development
-- `--test_run`: `True` to cap the dataset at 800 000 rows for quick iteration
+Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
 
-## Architecture
+---
 
-This is a master's thesis research project studying **algorithmic fairness under temporal distribution shifts**, using Brazilian SRAG (Severe Acute Respiratory Illness) surveillance data from 2019–2026.
+**These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
 
-### Data flow
+## 5. Project context
 
-`data_utils.pre_process_df` orchestrates three private steps then applies final filters.
+**README.md is the source of truth** for the pipeline, baselines, CLI, output folders and tools. Read it before touching any of those, and don't duplicate its content here.
 
-**`_import_data`** — reads a fixed set of 42 columns from all parquet files under `src/data/SRAG/raw/` and concatenates them into a single DataFrame. No filtering at this stage.
+Rules that follow from how the project works:
+- **Folder names are cache keys.** After changing a baseline's logic, existing result folders will be silently reused — tell the user; don't delete them yourself. Any new parameter that changes output must be encoded in the folder name.
+- **Changing the output schema** (folder names or CSV columns) requires a one-off `src/tools/migrate_*.py` script and updating the regexes in `src/tools/concatenate_results.py`.
+- **Preprocessing cache** is keyed only on the functions listed in the README. Preprocessing logic changed elsewhere does not invalidate it — use `use_cache=False` or warn the user.
+- **`src/results/` is committed** and represents hours of compute. Confirm with the user before deleting any folder there. After changing results, rerun `concatenate_results.py` so `src/results/all/` stays in sync.
 
-**`_fill_na`** — drops rows missing `EVOLUCAO` or `CS_RACA` (target and sensitive attribute — both required). Remaining NAs are filled with sentinel values matching the SRAG codebook: `2` (= "Não") for most binary yes/no fields, `3` for `SUPORT_VEN`, `6` for `TOMO_RES`/`RAIOX_RES`, `4` for `CLASSI_FIN`. `9` (= "Ignorado") is replaced with the same sentinel. Rows where `CS_RACA == 9` or `CS_GESTANT == 9` are dropped entirely.
+Verification (complements section 4): there is no test suite. "Verified" means `uv run ruff check src/` is clean, a run with `--test_run True --alpha 0.5` finishes without errors, and the generated CSV/chart has been checked. For chart-only changes, use `src/tools/regenerate_charts.py`.
 
-**`_convert_types`** — applies the following transformations in order:
-1. `DT_NOTIFIC` → `YEAR-MONTH` (period M); original column dropped.
-2. Binary 1/2 fields (symptoms, comorbidities, flags): coerced to numeric, then remapped to `1 if value == 1 else 0`. This collapses "Não" (2) and any sentinel into 0.
-3. Multi-category fields (`AVE_SUINO`, `CS_GESTANT`, `TP_ANTIVIR`, `SUPORT_VEN`, `RAIOX_RES`, `TOMO_RES`, `CLASSI_FIN`): cast to `int → str`, then one-hot encoded with `drop_first=True`.
-4. `CS_RACA`: `1` (Branca) → `0` (privileged); all other values → `1` (sensitive).
-5. `EVOLUCAO`: rows with values other than 1 (Cura) or 2 (Óbito) are dropped; `1 → 0`, `2 → 1` (death = positive class).
-6. Rows with `NU_IDADE_N >= 120` are dropped as implausible.
-7. **`IDADE_BIN` is derived here**, before normalization, as `(NU_IDADE_N >= 65).astype(int)`. Order matters — the threshold applies to raw years.
-8. `NU_IDADE_N` is min-max normalized to `[0, 1]` using theoretical bounds `[0, 100]`.
-
-**Post-processing in `pre_process_df`** — rows from 2018 are dropped (incomplete surveillance year); the DataFrame is sorted ascending by `YEAR-MONTH`. Then, to prevent leakage:
-- `sensitive_attribute == 'IDADE_BIN'`: drop `NU_IDADE_N` (would trivially reconstruct the sensitive attribute)
-- otherwise: drop `IDADE_BIN` (not the target sensitive attribute; must not act as a predictor)
-
-The sensitive attribute encoding is:
-- `CS_RACA`: 0 = Branca/White (privileged), 1 = non-White (sensitive)
-- `IDADE_BIN`: 0 = age < 65 (privileged), 1 = age ≥ 65 (sensitive)
-
-### The four baselines (`src/main.py` → `run_baseline`)
-
-| Baseline | Training data | Reweighing |
-|----------|--------------|------------|
-| `vanilla` | Batch 0 only, never retrained | None |
-| `static` | Batch 0 only, never retrained | Batch 0 proportions (computed once, frozen) |
-| `dynamic` | All prior batches (cumulative) | Current batch proportions |
-| `abcinml` | All prior batches (cumulative) | Blend of current + forecasted future: `w = α·w_current + (1−α)·w_future` |
-
-The `abcinml` baseline implements the **Anticipatory Bias Correction in ML** approach: it forecasts future joint distributions of (S, Y) using a rolling window average over the last `forecast_window=10` batches, then pre-emptively adjusts sample weights toward the expected future distribution. `alpha=0` means full anticipation; `alpha=1` means pure current reweighing (equivalent to `dynamic`).
-
-The first 10 batches are skipped for `abcinml` (insufficient history to forecast).
-
-`dynamic` and `abcinml` maintain an `accumulated_train_df` inside `run_baseline` that grows by one batch per iteration, avoiding O(N²) re-filtering of the full DataFrame. `vanilla` and `static` still go through `model_utils.get_train_and_test`.
-
-### Key utility modules
-
-- **`model_utils.py`**: `weight_estimation` computes reweighing factors from current batch; `weight_estimation_anticipated` does the same from forecasted proportions; `reweigh_df` blends them. `get_train_and_test` handles train/test splits for `vanilla` and `static` only. `initialize_model` creates models with `n_jobs=-1` (all cores); XGBoost uses `tree_method='hist'` for histogram-based training.
-- **`metrics_utils.py`**: Snapshot metrics per batch (accuracy, AUC, demographic parity difference, TPR diff, FPR diff via `fairlearn`). Temporal metrics (maximum bias, temporal stability, max bias difference) summarize across all batches. All chart functions compute y-axis limits dynamically from the data — no hardcoded ranges. Chart generation saves to `src/figures/{sensitive_attribute}/{model_name}_alpha_{alpha_label}_window_{forecast_window}/`.
-- **`general_utils.py`**: Argument parsing and state initialization for a run.
-
-### Outputs
-
-- Charts: `src/figures/{sensitive_attribute}/{model_name}_alpha_{alpha_label}_window_{forecast_window}/` — `model_performance_metrics.png`, `model_performance_comparison.png`, `fairness_comparison_only.png`, `shap_summary.png`, `absolute_rates_by_group.png`
-- CSVs: `src/utils/results/{sensitive_attribute}/{model_name}_alpha_{alpha_label}_window_{forecast_window}/` — `assessment_all_baselines.csv`, `temporal_results_df.csv`, `absolute_results_df.csv`
-
-Both output directories are created automatically on first run. Comparative charts (`model_performance_comparison.png`, `fairness_comparison_only.png`, `absolute_rates_by_group.png`) are only generated when `--baseline_type all` (multiple baselines).
-
-## Code style
-
-Ruff is configured with single-quote style (`quote-style = "single"`).
+Workflow and style:
+- Large changes start with a design doc in `docs/*_plan.md` (in Portuguese) before any code.
+- Changes to the CLI, outputs or pipeline update README.md in the same change.
+- Ruff uses single quotes (`quote-style = "single"`).

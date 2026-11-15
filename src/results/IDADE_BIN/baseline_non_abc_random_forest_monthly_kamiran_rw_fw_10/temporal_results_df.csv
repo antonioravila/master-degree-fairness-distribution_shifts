@@ -1,0 +1,3 @@
+Maximum Bias,Temporal Stability,Maximum Bias Difference,baseline,model_name,forecast_window,forecasting_technique,batch_type,alpha_ema,fairness_correction,apr_fairness_measure,train_window
+0.26937275310823383,0.010148336817491315,0.15897690046292193,vanilla,random_forest,10,sma,monthly,0.5,kamiran_rw,,none
+0.1977425677567612,0.007265517405814354,0.16959571661063103,static,random_forest,10,sma,monthly,0.5,kamiran_rw,,none

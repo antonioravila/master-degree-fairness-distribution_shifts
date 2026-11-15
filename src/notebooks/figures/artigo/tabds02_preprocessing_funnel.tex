@@ -1,0 +1,17 @@
+\begin{table}
+  \small
+  \caption{Preprocessing funnel: records remaining after each rule (applied in this order).}
+  \label{tab:preprocessing-funnel}
+  \begin{tabular}{lrrr}
+    \toprule
+    Step & Remaining & Removed & \% of raw \\
+    \midrule
+    Raw records (eight yearly files) & 4,537,980 & -- & 100.0\% \\
+    Outcome and race reported & 4,162,383 & 375,597 & 91.7\% \\
+    Race and pregnancy status not "unknown" & 4,011,197 & 151,186 & 88.4\% \\
+    Outcome is recovery or death & 3,835,704 & 175,493 & 84.5\% \\
+    Age below 120 years & 3,835,694 & 10 & 84.5\% \\
+    Notified between 2019-01 and 2026-02 & 3,791,353 & 44,341 & 83.5\% \\
+    \bottomrule
+  \end{tabular}
+\end{table}

@@ -1,0 +1,22 @@
+\begin{table}
+  \small
+  \caption{Dataset overview (SRAG, 2019--2026): raw data and the dataset used in the experiments.}
+  \label{tab:dataset-overview}
+  \begin{tabular}{ll}
+    \toprule
+    Item & Value \\
+    \midrule
+    Source & SRAG, Brazilian Ministry of Health (SUS open data), 8 yearly files, 2019--2026 \\
+    Raw records & 4,537,980 \\
+    Columns per raw file / read & 194 / 42 (41 text, 1 date) \\
+    Records after preprocessing (monthly / weekly) & 3,791,353 / 3,791,279 \\
+    Final columns & 60: 56 features (30 binary, 26 one-hot), target, race, sensitive attribute, window \\
+    Final data types & 59 int8 (window: monthly period) \\
+    Time window & 2019-01 to 2026-02 (86 monthly, 379 weekly batches) \\
+    Monthly batch size (min / median / max) & 981 / 22,967 / 260,163 \\
+    Weekly batch size (min / median / max) & 118 / 5,231 / 63,248 \\
+    Target (positive class) & death, 23.23\% of records \\
+    Sensitive attribute & age $\geq$ 65 years, 35.09\% of records \\
+    \bottomrule
+  \end{tabular}
+\end{table}

@@ -1,5 +1,4 @@
 import os
-import shap
 import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
@@ -13,9 +12,10 @@ from fairlearn.metrics import (
 _SNAPSHOT_METRICS = [
     ('acc', 'Accuracy'),
     ('auc', 'AUC-ROC'),
-    ('sp', 'Demographic Parity Diff.'),
-    ('tpr', 'TPR Difference'),
-    ('fpr', 'FPR Difference'),
+    ('dp', 'Demographic Parity Diff.'),
+    ('tpr_diff', 'TPR Difference'),
+    ('fpr_diff', 'FPR Difference'),
+    ('eq_odds_diff', 'Equalized Odds Diff.'),
 ]
 
 _FIGURES_DIR = os.path.join(os.path.dirname(__file__), '..', 'figures')
@@ -50,18 +50,60 @@ def _batch_to_datetime(labels: list, batch_type: str) -> pd.DatetimeIndex:
     return pd.to_datetime([f'{b}-01' for b in labels])
 
 
-def _run_folder_name(model_name, alpha, forecasting_technique, forecast_window, batch_type, alpha_ema):
+def _fairness_correction_suffix(fairness_correction):
+    # Every run folder carries its fairness-correction token so 'kamiran_rw' and
+    # 'adaptative_rw' never share a folder. The APR fairness measure is NOT part
+    # of the folder name (recorded in the CSVs only).
+    return f'_{fairness_correction}'
+
+
+def _train_window_suffix(train_window):
+    # Always explicit (even for the 'none' / unbounded default) — same reasoning
+    # as _fairness_correction_suffix: an implicit/conditional suffix would make a
+    # folder ambiguous between "predates this axis" and "uses the default value".
+    token = 'none' if train_window is None else str(train_window)
+    return f'_trainwindow_{token}'
+
+
+def _forecast_window_suffix(forecast_window):
+    # vanilla/static/dynamic don't forecast, but forecast_window still changes
+    # their output: it sets the warm-up skip in main.run_baseline, which decides
+    # which batches they're evaluated on (and, for vanilla/static, which single
+    # batch they train on). Folder names are cache keys, so it has to be here —
+    # otherwise a run with a different forecast_window silently reuses the
+    # cached result of the first one that wrote the folder.
+    return f'_fw_{forecast_window}'
+
+
+def _run_folder_name(model_name, alpha, forecasting_technique, forecast_window, batch_type, alpha_ema, fairness_correction='kamiran_rw', train_window=None):
     ema_suffix = f'_ema_{alpha_ema}' if forecasting_technique == 'ema' else ''
+    fc_suffix = _fairness_correction_suffix(fairness_correction)
+    tw_suffix = _train_window_suffix(train_window)
     alpha_str = str(int(alpha)) if float(alpha) == int(float(alpha)) else str(alpha)
-    return f'{model_name}_alpha_{alpha_str}_{forecasting_technique}_window_{forecast_window}_{batch_type}{ema_suffix}'
+    return f'{model_name}_alpha_{alpha_str}_{forecasting_technique}_window_{forecast_window}_{batch_type}{ema_suffix}{fc_suffix}{tw_suffix}'
 
 
-def baseline_non_abc_folder_name(model_name, batch_type):
-    return f'baseline_non_abc_{model_name}_{batch_type}'
+def baseline_non_abc_folder_name(model_name, batch_type, fairness_correction='kamiran_rw', *, forecast_window):
+    # vanilla/static only — they never depend on train_window, so this folder
+    # name never carries a train_window suffix. forecast_window is keyword-only
+    # and has no default so a caller that forgets it fails loudly instead of
+    # silently building a name that collides with another forecast_window.
+    fc_suffix = _fairness_correction_suffix(fairness_correction)
+    fw_suffix = _forecast_window_suffix(forecast_window)
+    return f'baseline_non_abc_{model_name}_{batch_type}{fc_suffix}{fw_suffix}'
 
 
-def save_results(sensitive_attribute, all_assessment_df, all_temporal_df, all_absolute_df, model_name, alpha, forecast_window, forecasting_technique, batch_type, alpha_ema):
-    run_folder = _run_folder_name(model_name, alpha, forecasting_technique, forecast_window, batch_type, alpha_ema)
+def baseline_dynamic_folder_name(model_name, batch_type, fairness_correction='kamiran_rw', train_window=None, *, forecast_window):
+    # dynamic's own storage, separate from vanilla/static — see
+    # docs/train_window_migration_plan.md §3 for why this split exists.
+    fc_suffix = _fairness_correction_suffix(fairness_correction)
+    tw_suffix = _train_window_suffix(train_window)
+    fw_suffix = _forecast_window_suffix(forecast_window)
+    return f'baseline_dynamic_{model_name}_{batch_type}{fc_suffix}{tw_suffix}{fw_suffix}'
+
+
+def save_results(sensitive_attribute, all_assessment_df, all_temporal_df, all_absolute_df, model_name, alpha, forecast_window, forecasting_technique, batch_type, alpha_ema, fairness_correction='kamiran_rw', train_window=None):
+    run_folder = _run_folder_name(model_name, alpha, forecasting_technique, forecast_window, batch_type, alpha_ema, fairness_correction, train_window)
     results_dir = os.path.join('src', 'results', sensitive_attribute, run_folder)
     os.makedirs(results_dir, exist_ok=True)
     all_assessment_df.to_csv(os.path.join(results_dir, 'assessment_all_baselines.csv'), index=False)
@@ -70,8 +112,8 @@ def save_results(sensitive_attribute, all_assessment_df, all_temporal_df, all_ab
     print(f'Results saved to {os.path.abspath(results_dir)}')
 
 
-def save_baseline_non_abc_results(sensitive_attribute, all_assessment_df, all_temporal_df, all_absolute_df, model_name, batch_type):
-    folder = baseline_non_abc_folder_name(model_name, batch_type)
+def save_baseline_non_abc_results(sensitive_attribute, all_assessment_df, all_temporal_df, all_absolute_df, model_name, batch_type, fairness_correction='kamiran_rw', *, forecast_window):
+    folder = baseline_non_abc_folder_name(model_name, batch_type, fairness_correction, forecast_window=forecast_window)
     results_dir = os.path.join('src', 'results', sensitive_attribute, folder)
     os.makedirs(results_dir, exist_ok=True)
     all_assessment_df.to_csv(os.path.join(results_dir, 'assessment_all_baselines.csv'), index=False)
@@ -80,16 +122,24 @@ def save_baseline_non_abc_results(sensitive_attribute, all_assessment_df, all_te
     print(f'Non-ABC results saved to {os.path.abspath(results_dir)}')
 
 
-def generate_all_charts(baseline_type, baselines, alpha, sensitive_attribute, all_assessment_df, all_temporal_df, all_absolute_df, all_shap_records, model_name, forecast_window, forecasting_technique, batch_type, alpha_ema, subfolder_override=None):
+def save_baseline_dynamic_results(sensitive_attribute, all_assessment_df, all_temporal_df, all_absolute_df, model_name, batch_type, fairness_correction='kamiran_rw', train_window=None, *, forecast_window):
+    folder = baseline_dynamic_folder_name(model_name, batch_type, fairness_correction, train_window, forecast_window=forecast_window)
+    results_dir = os.path.join('src', 'results', sensitive_attribute, folder)
+    os.makedirs(results_dir, exist_ok=True)
+    all_assessment_df.to_csv(os.path.join(results_dir, 'assessment_all_baselines.csv'), index=False)
+    all_temporal_df.to_csv(os.path.join(results_dir, 'temporal_results_df.csv'), index=False)
+    all_absolute_df.to_csv(os.path.join(results_dir, 'absolute_results_df.csv'), index=False)
+    print(f'Dynamic results saved to {os.path.abspath(results_dir)}')
+
+
+def generate_all_charts(baseline_type, baselines, alpha, sensitive_attribute, all_assessment_df, all_temporal_df, all_absolute_df, model_name, forecast_window, forecasting_technique, batch_type, alpha_ema, fairness_correction='kamiran_rw', subfolder_override=None, train_window=None):
     chart_label = 'all' if baseline_type == 'all' else baseline_type
     if subfolder_override is not None:
         subfolder = subfolder_override
     else:
-        run_folder = _run_folder_name(model_name, alpha, forecasting_technique, forecast_window, batch_type, alpha_ema)
+        run_folder = _run_folder_name(model_name, alpha, forecasting_technique, forecast_window, batch_type, alpha_ema, fairness_correction, train_window)
         subfolder = os.path.join(sensitive_attribute, run_folder)
     _generate_performance_charts(all_assessment_df, all_temporal_df, baseline_type=chart_label, save=True, subfolder=subfolder, model_name=model_name, forecast_window=forecast_window, batch_type=batch_type)
-    if model_name != 'xgboost':
-        _generate_shap_charts(all_shap_records, save=True, subfolder=subfolder, model_name=model_name, forecast_window=forecast_window, batch_type=batch_type)
 
     if len(baselines) > 1:
         _generate_comparative_chart(all_assessment_df, moving_avg_window=20 if batch_type == 'weekly' else 5, save=True, subfolder=subfolder, model_name=model_name, forecast_window=forecast_window, batch_type=batch_type)
@@ -226,9 +276,9 @@ def _generate_performance_charts(
 def compute_temporal_metrics(
     assessment_metrics: pd.DataFrame, alpha: float
 ) -> pd.DataFrame:
-    mb = assessment_metrics['sp'].abs().max()
-    ts = assessment_metrics['sp'].diff().abs().mean()
-    mbd = assessment_metrics['sp'].diff().abs().max()
+    mb = assessment_metrics['dp'].abs().max()
+    ts = assessment_metrics['dp'].diff().abs().mean()
+    mbd = assessment_metrics['dp'].diff().abs().max()
 
     temporal_metrics = pd.DataFrame(
         {
@@ -260,7 +310,7 @@ def compute_snapshot_metrics(
 
     acc = accuracy_score(y_test, y_pred)
     auc = roc_auc_score(y_test, y_pred_proba[:, 1])
-    sp_diff = demographic_parity_difference(
+    dp_diff = demographic_parity_difference(
         y_true=y_test, y_pred=y_pred, sensitive_features=sensitive_features
     )
     tpr_diff = true_positive_rate_difference(
@@ -269,19 +319,10 @@ def compute_snapshot_metrics(
     fpr_diff = false_positive_rate_difference(
         y_true=y_test, y_pred=y_pred, sensitive_features=sensitive_features
     )
+    # fmax ignores a single NaN, matching pandas max(axis=1) in migrate_add_eq_odds_diff.py
+    eq_odds_diff = float(np.fmax(tpr_diff, fpr_diff))
 
-    return acc, auc, sp_diff, tpr_diff, fpr_diff, tpr_S0, fpr_S0, tpr_S1, fpr_S1
-
-
-def compute_shap_values(model_name, model, X_test: pd.DataFrame) -> dict:
-    if model_name.lower() == 'xgboost':
-        explainer = shap.TreeExplainer(model)
-    elif model_name.lower() == 'logistic_regression':
-        explainer = shap.LinearExplainer(model, X_test)
-    else: raise ValueError(f"Unsupported model_name: {model_name}")
-
-    values = explainer.shap_values(X_test)
-    return {'shap_values': values, 'feature_names': list(X_test.columns)}
+    return acc, auc, dp_diff, tpr_diff, fpr_diff, eq_odds_diff, tpr_S0, fpr_S0, tpr_S1, fpr_S1
 
 
 _BASELINE_COLORS = {
@@ -357,7 +398,7 @@ def _generate_comparative_chart(
             period_handles = handles
 
         # Fairness reference lines
-        is_fairness = col in ('sp', 'tpr', 'fpr')
+        is_fairness = col in ('dp', 'tpr_diff', 'fpr_diff', 'eq_odds_diff')
         if is_fairness:
             ax.axhline(y=0, color='black', linestyle='--', linewidth=1.0, alpha=0.5, zorder=2)
 
@@ -511,63 +552,3 @@ def _generate_absolute_rates_chart(
         out_path = os.path.join(save_dir, 'absolute_rates_by_group.png')
         fig.savefig(out_path, dpi=150, bbox_inches='tight')
         print(f'Absolute rates chart saved to {os.path.abspath(out_path)}')
-
-
-def _generate_shap_charts(shap_records: list, save: bool = False, subfolder: str = '', model_name: str = '', forecast_window: int = 0, batch_type: str = 'monthly') -> None:
-    if not shap_records:
-        return
-
-    feature_names = shap_records[0]['feature_names']
-    shap_records = sorted(shap_records, key=lambda r: _batch_to_datetime([r['batch']], batch_type)[0])
-    batches = [r['batch'] for r in shap_records]
-
-    # mean |SHAP| per feature per batch → shape (n_batches, n_features)
-    mean_abs = np.array([
-        np.abs(r['shap_values']).mean(axis=0) for r in shap_records
-    ])
-
-    global_importance = mean_abs.mean(axis=0)
-    sorted_idx = np.argsort(global_importance)[::-1]
-
-    fig, (ax_bar, ax_heat) = plt.subplots(1, 2, figsize=(20, 12))
-
-    # --- global bar chart ---
-    ax_bar.barh(
-        [feature_names[i] for i in sorted_idx[::-1]],
-        global_importance[sorted_idx[::-1]],
-        color='steelblue',
-    )
-    ax_bar.set_xlabel('Mean |SHAP value|')
-    ax_bar.set_title('Global Feature Importance (all batches)')
-
-    # --- temporal heatmap ---
-    heatmap_data = mean_abs[:, sorted_idx].T  # (n_features, n_batches)
-    im = ax_heat.imshow(heatmap_data, aspect='auto', cmap='YlOrRd')
-    ax_heat.set_yticks(range(len(feature_names)))
-    ax_heat.set_yticklabels([feature_names[i] for i in sorted_idx], fontsize=8)
-
-    n_batches = len(batches)
-    tick_positions = np.linspace(0, n_batches - 1, min(_N_BINS, n_batches), dtype=int)
-    ax_heat.set_xticks(tick_positions)
-    ax_heat.set_xticklabels([batches[p] for p in tick_positions], rotation=45, ha='right', fontsize=8)
-    ax_heat.set_title('SHAP Feature Importance Over Time')
-    fig.colorbar(im, ax=ax_heat, label='Mean |SHAP value|')
-
-    batch_dates = _batch_to_datetime(batches, batch_type)
-    for vline_dt, vline_label in _VLINES:
-        idxs = [i for i, d in enumerate(batch_dates) if d >= vline_dt]
-        if idxs:
-            x = min(idxs) - 0.5
-            ax_heat.axvline(x=x, color='#555555', linestyle='--', linewidth=0.8, alpha=0.5)
-            ax_heat.text(x, -0.5, vline_label, rotation=90, fontsize=6,
-                         va='bottom', ha='right', color='#555555')
-
-    fig.suptitle('SHAP Value Analysis', fontsize=14, fontweight='bold')
-    plt.tight_layout()
-
-    if save:
-        save_dir = os.path.join(_FIGURES_DIR, subfolder) if subfolder else _FIGURES_DIR
-        os.makedirs(save_dir, exist_ok=True)
-        out_path = os.path.join(save_dir, 'shap_summary.png')
-        fig.savefig(out_path, dpi=150, bbox_inches='tight')
-        print(f'SHAP chart saved to {os.path.abspath(out_path)}')
