@@ -125,9 +125,6 @@ def run_baseline(
                         window_column=window_column,
                         sensitive_attribute=sensitive_attribute,
                         target_label=target_label,
-                        historical_proportions=historical_proportions,
-                        window=forecast_window_batches,
-                        alpha_ema=alpha_ema,
                     )
                 else:
                     forecasted_distributions = model_utils.forecast_joint_distributions(

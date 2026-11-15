@@ -289,7 +289,7 @@ APR is far more expensive than `kamiran_rw` (it retrains the model `apr_iteratio
 |---|---|
 | `sma` | Simple Moving Average over the last `forecast_window` batches |
 | `ema` | Exponential Moving Average with smoothing factor `--alpha_ema` (`min_periods=forecast_window`) |
-| `oracle` | Diagnostic-only: reads the **actual next batch's** proportions directly (falls back to `sma` for the final batch). Requires knowledge of the future and is never a deployable method — use it only to determine whether forecast quality or the reweighing mechanism itself is the bottleneck in ABCInML. |
+| `oracle` | Diagnostic-only: reads the **actual proportions of the batch being evaluated** (batch `i`, the same batch SMA/EMA forecast from history up to `i-1`), so its forecast error is zero. Results produced before 2026-11-15 used batch `i+1` (one batch after the evaluated one) and must be re-run. Requires knowledge of the future and is never a deployable method — use it only to determine whether forecast quality or the reweighing mechanism itself is the bottleneck in ABCInML. |
 
 `sma`/`ema` return `None` if fewer than `forecast_window` batches of history are available, causing ABCINML to skip that batch.
 

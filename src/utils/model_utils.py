@@ -97,28 +97,21 @@ def forecast_joint_distributions_oracle(
     window_column: str,
     sensitive_attribute: str,
     target_label: str,
-    historical_proportions: dict[str, list[float]],
-    window: int,
-    alpha_ema: float,
-) -> dict[str, float] | None:
+) -> dict[str, float]:
     """Oracle forecaster for upper-bound diagnostic analysis.
 
     Instead of estimating future joint distributions from historical trends,
-    reads the actual next batch's proportions directly.
+    reads the actual proportions of batch i — the batch the model is evaluated
+    on, i.e. the same batch SMA/EMA try to forecast (their history only goes up
+    to batch i-1, see main.run_baseline). Its forecast error is therefore zero.
 
     Oracle is a diagnostic tool only. It requires knowledge of the future and
     cannot be used in production. Use only for upper-bound analysis to determine
     whether forecasting quality is the bottleneck in ABCInML, or whether the
     reweighing mechanism itself is the limiting factor.
-
-    Falls back to SMA when i+1 >= len(batches) (no next batch available).
     """
-    if i + 1 < len(batches):
-        next_batch_df = df[df[window_column] == batches[i + 1]].copy()
-        return compute_batch_proportions(next_batch_df, sensitive_attribute, target_label)
-    return forecast_joint_distributions(
-        historical_proportions, window=window, forecasting_technique='sma', alpha_ema=alpha_ema
-    )
+    test_batch_df = df[df[window_column] == batches[i]].copy()
+    return compute_batch_proportions(test_batch_df, sensitive_attribute, target_label)
 
 
 def weight_estimation(
