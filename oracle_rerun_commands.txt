@@ -1,0 +1,25 @@
+Oracle rerun (branch oracle_fix)
+================================
+
+The oracle used batch i+1 instead of the evaluated batch i. The fix and the
+removal of the 264 old oracle folders are in commit c65755e. Run on the
+machine with the good GPU (>= 8 GB VRAM):
+
+1) Get the branch
+   git fetch
+   git checkout oracle_fix
+
+2) Run the 24 missing oracle scenarios (LR, XGBoost, RF; kamiran_rw;
+   monthly/weekly; train_window none/3/6/12; 11 alphas each), in parallel
+   uv run python run_parallel.py --models logistic_regression xgboost random_forest --techniques oracle --fairness_corrections kamiran_rw --train_windows none 3 6 12 --max_xgb_workers 2 --max_lr_workers 4
+
+   If it stops, run the same command again: finished alphas are skipped.
+   Logs: logs/
+
+3) Rebuild src/results/all
+   uv run python src/tools/concatenate_results.py
+
+4) Push the results
+   git add src/results/IDADE_BIN src/results/all
+   git commit -m "Re-run oracle after the off-by-one fix"
+   git push
