@@ -4,7 +4,7 @@ Vanilla baseline under distribution shift: monthly vs. weekly batching.
 Shows the never-retrained `vanilla` baseline's fairness metrics (demographic
 parity, TPR, and FPR differences) degrading over time as the underlying data
 distribution shifts, using the same visual identity (period shading, baseline
-colors, moving averages) as `src/notebooks/seminario de andamento.ipynb`.
+colors, moving averages) as `src/notebooks/04_results_overview.ipynb`.
 
 Usage:
     uv run python src/tools/vanilla_shift_chart.py --sensitive_attribute IDADE_BIN --model_name logistic_regression
@@ -35,14 +35,6 @@ _FAIRNESS_METRICS = [
     ('tpr_diff', 'TPR Difference'),
     ('fpr_diff', 'FPR Difference'),
 ]
-
-_PERIOD_LABELS_EN = {
-    'pré-pandemia': 'pre-pandemic',
-    'pandemia aguda 1': 'acute pandemic 1',
-    'pandemia aguda 2': 'acute pandemic 2',
-    'transição': 'transition',
-    'endêmico': 'endemic',
-}
 
 _VANILLA_COLOR = _BASELINE_COLORS['vanilla']
 
@@ -136,7 +128,7 @@ def build_chart(
             period_handles = ph
         raw_handle, ma_handle = rh, mh
 
-    # Same post-plot alpha treatment as the seminario notebook
+    # Same post-plot alpha treatment as the 04_results_overview notebook
     for ax in fig.axes:
         for patch in ax.patches:
             patch.set_alpha(0.20)
@@ -146,7 +138,7 @@ def build_chart(
     all_handles = [raw_handle, ma_handle] + period_handles
     legend_labels = (
         [raw_handle.get_label(), ma_handle.get_label()]
-        + [_PERIOD_LABELS_EN.get(h.get_label(), h.get_label()) for h in period_handles]
+        + [h.get_label() for h in period_handles]
     )
     leg = fig.legend(
         all_handles, legend_labels,

@@ -205,8 +205,7 @@ def main():
     _ALL_BASELINES = ['vanilla', 'static', 'dynamic', 'abcinml']
     # dynamic moved out of this list — it's the only one of the three
     # alpha-independent baselines that train_window affects, so it now gets
-    # its own storage/cache instead of sharing one with vanilla/static. See
-    # docs/train_window_migration_plan.md §3.
+    # its own storage/cache instead of sharing one with vanilla/static.
     _NON_ABC_BASELINES = ['vanilla', 'static']
 
     alphas, baseline_type, sensitive_attribute, target_label, model_name, test_run, forecasting_technique, forecast_window, train_window, batch_type, alpha_ema, fairness_correction, apr_iterations, apr_eta, apr_subgroup_alpha, apr_decision_boundary, apr_fairness_measure = (

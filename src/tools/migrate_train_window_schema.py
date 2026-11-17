@@ -1,7 +1,6 @@
 """
 Migrates this branch's existing results (all run before `--train_window`
 existed, all kamiran-only) to the schema introduced by that hyperparameter.
-See docs/train_window_migration_plan.md for the full design.
 
 Two independent, idempotent changes, applied per sensitive-attribute folder
 under src/results/ (e.g. src/results/IDADE_BIN/):

@@ -26,9 +26,9 @@ _METRICS = {
 }
 
 _STAT_LABELS = {
-    'max': 'Máximo',
-    'min': 'Mínimo',
-    'mean': 'Média',
+    'max': 'Maximum',
+    'min': 'Minimum',
+    'mean': 'Mean',
 }
 
 _HEADER_COLOR = '#2C3E50'
@@ -152,7 +152,7 @@ def main() -> None:
             _render_table(axes[row_idx][col_idx], table, model)
 
     fig.suptitle(
-        'Impacto do parâmetro α no ABCInML — Estatísticas por batch',
+        'Impact of the α parameter on ABCInML — Per-batch statistics',
         fontsize=15, fontweight='bold', color=_HEADER_COLOR, y=1.02,
     )
 

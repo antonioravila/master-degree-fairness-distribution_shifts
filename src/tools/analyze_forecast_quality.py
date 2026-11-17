@@ -157,7 +157,7 @@ def plot_error_over_time(df: pd.DataFrame, batch_type: str, out_path: Path) -> N
         ax.legend(fontsize=9)
 
     fig.suptitle(
-        'Qualidade do Forecast: Erro Absoluto por Proporção ao Longo do Tempo',
+        'Forecast Quality: Absolute Error per Proportion over Time',
         fontsize=13,
         fontweight='bold',
     )

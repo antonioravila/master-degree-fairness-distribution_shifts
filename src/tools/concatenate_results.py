@@ -26,7 +26,7 @@ _ABC_RE = re.compile(
     r'^(?P<model>.+)_alpha_(?P<alpha>[\d.]+)_(?P<technique>.+)_window_(?P<window>\d+)_(?P<batch>monthly|weekly)(?:_ema_(?P<alpha_ema>[\d.]+))?(?:_(?P<fairness_correction>kamiran_rw|adaptative_rw))?(?:_trainwindow_(?P<train_window>\w+))?$'
 )
 # vanilla/static (never train_window-dependent) and dynamic (own folder, always
-# train_window-dependent, see docs/train_window_migration_plan.md) share this
+# train_window-dependent) share this
 # shape except for the prefix and the optional trainwindow suffix.
 _BASELINE_RE = re.compile(
     # train_window is [^_]+, not \w+: \w matches underscores, so it would greedily

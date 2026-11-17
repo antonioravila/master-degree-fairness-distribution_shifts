@@ -1,6 +1,6 @@
 # Fairness Under Temporal Distribution Shifts
 
-Master's thesis research project studying **algorithmic fairness under temporal distribution shifts**, using Brazilian SRAG (Severe Acute Respiratory Illness) surveillance data from 2019–2026.
+This project studies **algorithmic fairness under temporal distribution shifts**, using Brazilian SRAG (Severe Acute Respiratory Illness) surveillance data from 2019–2026.
 
 The central research question is: as the statistical distribution of a population changes over time (e.g., across COVID-19 pandemic phases), do fairness-aware ML models trained on historical data remain fair? And can anticipating future distribution shifts lead to better fairness outcomes?
 
@@ -66,8 +66,9 @@ src/
 │   ├── vanilla_shift_chart.py         # Standalone vanilla-baseline degradation chart
 │   ├── migrate_legacy_schema.py       # One-off: migrate pre-APR result CSVs/folders
 │   ├── migrate_train_window_schema.py # One-off: migrate pre-train_window result folders
-│   └── migrate_forecast_window_schema.py  # One-off: backfill _fw_{window} folder suffix
-├── notebooks/                 # Exploratory analysis (EDA, seminar figures) + 03_artigo_figuras_tabelas (paper)
+│   ├── migrate_forecast_window_schema.py  # One-off: backfill _fw_{window} folder suffix
+│   └── migrate_period_labels_en.py    # One-off: period labels in mae_by_period.csv → English
+├── notebooks/                 # 01 EDA, 02 baseline comparison, 03 paper figures/tables, 04 results overview
 ├── figures/                   # Generated charts (gitignored)
 └── results/                   # Generated CSVs (committed)
 run_parallel.py                # Runs the full experiment grid across processes
@@ -117,7 +118,7 @@ Brazilian SRAG (Síndrome Respiratória Aguda Grave) surveillance dataset publis
 
 The dataset spans **2019–2026** and covers the full COVID-19 pandemic arc: pre-pandemic, acute pandemic phases, transition, and endemic. The final date range kept is `2019-01` to `2026-02` (monthly) / `2019-01` to `2026-08` (weekly).
 
-All Brazilian states/regions are currently included (region filtering is implemented in `data_utils._filter_region` but disabled — it can be restored to a single-state subset, e.g. `RS`, by uncommenting one line).
+All Brazilian states/regions are currently included (region filtering is implemented in `data_utils._filter_region` but disabled — it can be restored to a subset of states by uncommenting one line).
 
 ### Feature Set
 
@@ -223,7 +224,7 @@ Retrained at every batch using accumulated prior data — unbounded by default, 
 
 ### ABCINML (Anticipatory Bias Correction)
 
-The core contribution of this thesis. Extends the Dynamic approach by **anticipating future distribution shifts** rather than just reacting to the current one.
+The core contribution of this work. Extends the Dynamic approach by **anticipating future distribution shifts** rather than just reacting to the current one.
 
 **Mechanism:**
 
@@ -371,7 +372,7 @@ An additional `baseline_comparison_*` folder is generated whenever 2+ of `{vanil
 | `model_performance_comparison.png` | Overlay of all baselines per metric, moving average only, common date range. | 2+ baselines in the same chart call |
 | `absolute_rates_by_group.png` | TPR and FPR per sensitive group (S0/S1) over time, one row per baseline. | 2+ baselines in the same chart call |
 
-Charts annotate five historical periods with colored spans (dates fixed regardless of `batch_type`). The labels drawn on the charts are in Portuguese (`pré-pandemia`, `pandemia aguda 1`, `pandemia aguda 2`, `transição`, `endêmico`):
+Charts annotate five historical periods with colored spans (dates fixed regardless of `batch_type`). The labels are defined in `metrics_utils._PERIOD_SPANS` (`pre-pandemic`, `acute pandemic 1`, `acute pandemic 2`, `transition`, `endemic`):
 
 | Period | Date range |
 |---|---|
@@ -544,10 +545,11 @@ All scripts live in `src/tools/` and are run with `uv run python src/tools/<scri
 | `migrate_train_window_schema.py` | One-off migration: splits legacy `baseline_non_abc_*` folders into separate `vanilla`/`static` vs. `dynamic` folders and appends the `_trainwindow_none` suffix everywhere, for results produced before `--train_window` existed. |
 | `migrate_forecast_window_schema.py` | One-off migration: backfills the `_fw_{forecast_window}` suffix onto existing `baseline_non_abc_*`/`baseline_dynamic_*` folders. |
 | `migrate_add_eq_odds_diff.py` | Adds/recomputes `eq_odds_diff = max(tpr_diff, fpr_diff)` in every `assessment_all_baselines.csv` under `src/results/` (including `all/`), without retraining. Idempotent — rerun it on results produced by older code. `--dry-run` lists the files without writing. |
+| `migrate_period_labels_en.py` | One-off migration: translates the epidemiological period labels stored in every `mae_by_period.csv` under `src/results/forecast_quality/` from Portuguese to English, matching `metrics_utils._PERIOD_SPANS`. Idempotent; `--dry-run` lists the files without writing. |
 
 ### Paper figures and tables
 
-`src/notebooks/03_artigo_figuras_tabelas.ipynb` generates **only** the figures and tables that appear in the paper (Oct/2026 version), into `src/notebooks/figures/artigo/`. It reads `src/results/all/` (filtered to `kamiran_rw`, `train_window = none`, a single `FORECAST_WINDOW = 5` for every item), `src/results/forecast_quality/IDADE_BIN/` and, for Figs. 1–2 only, the raw SRAG parquets (`RUN_EDA = False` skips them). Run `concatenate_results.py` first so `src/results/all/` is up to date. A single forecast window is used because vanilla/static are trained once on the first post-warm-up batch, which depends on the window.
+`src/notebooks/03_paper_figures_tables.ipynb` generates **only** the figures and tables that appear in the paper, into `src/notebooks/figures/paper/`. It reads `src/results/all/` (filtered to `kamiran_rw`, `train_window = none`, a single `FORECAST_WINDOW = 5` for every item), `src/results/forecast_quality/IDADE_BIN/` and, for Figs. 1–2 only, the raw SRAG parquets (`RUN_EDA = False` skips them). Run `concatenate_results.py` first so `src/results/all/` is up to date. A single forecast window is used because vanilla/static are trained once on the first post-warm-up batch, which depends on the window.
 
 | Paper | File | Content |
 |---|---|---|
@@ -565,9 +567,9 @@ All scripts live in `src/tools/` and are run with `uv run python src/tools/<scri
 | Tab. 8 | `tab08b_mae_by_period.tex` | Forecast MAE of SMA and EMA by period |
 | Tab. 9 | `tab10f_forecast_error_vs_fairness.tex` | Forecast MAE and ABCInML fairness for SMA / EMA / Oracle (LR and XGBoost) |
 
-Section 5 of the notebook (*Dataset analytics*, for the Dataset Review) also writes `tabds01`–`tabds07` (overview, preprocessing funnel, profile by period, missing values, feature shift, selection by year, proxy correlations) and `figds01_records_per_batch.png`; the raw-data part runs only with `RUN_EDA = True`, the rest reads the preprocessing cache. See `docs/dataset_analytics_opcoes.md`.
+Section 5 of the notebook (*Dataset analytics*, for the Dataset Review) also writes `tabds01`–`tabds07` (overview, preprocessing funnel, profile by period, missing values, feature shift, selection by year, proxy correlations) and `figds01_records_per_batch.png`; the raw-data part runs only with `RUN_EDA = True`, the rest reads the preprocessing cache.
 
-Tabs. 1–2 of the paper are written by hand. Where the numbers of the paper must be refreshed after new results, see `docs/atualizacao_dados_2026-10-20.md`.
+Tabs. 1–2 of the paper are written by hand.
 
 ---
 
@@ -578,11 +580,9 @@ Tabs. 1–2 of the paper are written by hand. Where the numbers of the paper mus
 ├── pyproject.toml           # Project metadata and dependencies
 ├── uv.lock                  # Locked dependency versions (uv)
 ├── .python-version          # Python version pinned for uv
-├── CLAUDE.md                # Codebase instructions for Claude Code
 ├── README.md
 ├── run_parallel.py          # Full-grid parallel runner
 ├── logs/                    # run_parallel.py per-job logs (gitignored)
-├── docs/                    # Design documents (in Portuguese), written before major changes
 └── src/
     ├── main.py              # Entry point; run_baseline() loop
     ├── data/

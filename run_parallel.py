@@ -13,7 +13,7 @@ MODELS = ['logistic_regression', 'xgboost', 'random_forest', 'lightgbm']
 POOL_BY_MODEL = {
     'xgboost': 'gpu',
     'random_forest': 'rf',
-    # lightgbm also uses n_jobs=-1: it shares RF's heavy-CPU pool (docs/lightgbm_plan.md §6.2)
+    # lightgbm also uses n_jobs=-1: it shares RF's heavy-CPU pool
     # and still runs alongside xgboost, which is on the GPU.
     'lightgbm': 'rf',
 }
@@ -31,11 +31,10 @@ FAIRNESS_CORRECTIONS = ['kamiran_rw', 'adaptative_rw']
 
 # train_window axis (months bounding dynamic/abcinml's training history).
 # dynamic/abcinml are the whole reason train_window exists (they're the slow
-# baselines) — so unlike leaving this at [None], the default grid now sweeps
-# the candidate values from docs/train_window_migration_plan.md §2 for BOTH
-# fairness corrections. This does multiply the grid 4x (40 -> 160 scenarios,
-# see the combinatorics discussion there) — pass --train_windows to override
-# with a narrower set if you want to run just the exploration subset first.
+# baselines) — so unlike leaving this at [None], the default grid sweeps
+# these candidate values for BOTH fairness corrections. This multiplies the
+# grid 4x — pass --train_windows to override with a narrower set if you want
+# to run just an exploration subset first.
 DEFAULT_TRAIN_WINDOWS = [None, 3, 6, 12]
 
 # Must match general_utils.py defaults
@@ -46,8 +45,8 @@ DEFAULT_ALPHA_EMA = 0.5
 
 RESULTS_BASE = Path('src/results')
 
-# Conservative defaults — safe for RTX 3050 (4 GB VRAM).
-# For RTX Blackwell 8 GB: --max_xgb_workers 2 --max_lr_workers 4
+# Conservative defaults — safe for a GPU with 4 GB of VRAM.
+# With 8 GB or more: --max_xgb_workers 2 --max_lr_workers 4
 DEFAULT_XGB_WORKERS = 1
 DEFAULT_LR_WORKERS = 2
 # random_forest and lightgbm use n_jobs=-1 (every core per process): more than one
@@ -251,7 +250,7 @@ def main():
             "Which --train_window values (months) to sweep for dynamic/abcinml, in addition to "
             "the existing model/technique/window/batch_type/fairness_correction grid. Use the "
             f"literal 'none' for unbounded history. Default: {['none' if w is None else w for w in DEFAULT_TRAIN_WINDOWS]} "
-            "for every fairness_correction requested (see docs/train_window_migration_plan.md)."
+            "for every fairness_correction requested."
         ),
     )
     parser.add_argument(

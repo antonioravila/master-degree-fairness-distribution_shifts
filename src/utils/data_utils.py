@@ -134,10 +134,10 @@ def _downcast_dtypes(df: pd.DataFrame, window_column: str) -> pd.DataFrame:
 
 
 def _filter_region(df, ):
-    # Temporarily disabled for the all-regions experiments (was:
-    # df = df[df['SG_UF_NOT'].isin(['RS'])]). Restore that line to go back to
-    # RS-only. SG_UF_NOT is still dropped below regardless — it isn't one-hot
-    # encoded in _convert_types and isn't meant to be a model feature.
+    # Disabled for the all-regions experiments. To restrict to a subset of
+    # states, add: df = df[df['SG_UF_NOT'].isin([...])]. SG_UF_NOT is still
+    # dropped below regardless — it isn't one-hot encoded in _convert_types
+    # and isn't meant to be a model feature.
     df.pop('SG_UF_NOT')
     return df
 
@@ -145,7 +145,7 @@ def _filter_region(df, ):
 def _preprocessing_fingerprint() -> str:
     """Hash of the source of every function pre_process_df calls, so the disk
     cache below is invalidated automatically whenever preprocessing logic
-    changes (e.g. toggling _filter_region back to RS-only) — no manual cache
+    changes (e.g. enabling the region filter in _filter_region) — no manual cache
     version bump needed.
     """
     src = ''.join(

@@ -11,7 +11,7 @@ def initialize_model(model_name, MAX_ITER):
         'logistic_regression': LogisticRegression(max_iter=MAX_ITER),
         'xgboost': xgb.XGBClassifier(device='cuda', tree_method='hist'),
         # Hyperparameters are not in the result folder name (the cache key):
-        # changing them requires a new model_name — see docs/random_forest_plan.md §5.
+        # changing them requires a new model_name.
         # No class_weight on purpose: group balancing is the reweighing's job.
         # No min_samples_leaf: at 50 the ~7k-row vanilla/static batch never predicted
         # a positive; max_depth alone bounds tree size (memory is dominated by the

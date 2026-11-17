@@ -21,14 +21,14 @@ _SNAPSHOT_METRICS = [
 _FIGURES_DIR = os.path.join(os.path.dirname(__file__), '..', 'figures')
 _N_BINS = 6
 
-# Cores fixas da paleta seaborn 'deep' (5 cores), na mesma convenção
-# período→cor do notebook 01_eda_distribution_shift.ipynb
+# Fixed colors from the seaborn 'deep' palette (5 colors), following the same
+# period→color convention as notebook 01_eda_distribution_shift.ipynb
 _PERIOD_SPANS = [
-    ('2019-02-01', '2020-03-01', 'pré-pandemia',     '#4C72B0'),
-    ('2020-03-01', '2022-01-01', 'pandemia aguda 1', '#DD8452'),
-    ('2022-01-01', '2023-01-01', 'pandemia aguda 2', '#55A868'),
-    ('2023-01-01', '2024-01-01', 'transição',         '#C44E52'),
-    ('2024-01-01', '2026-03-01', 'endêmico',          '#8172B3'),
+    ('2019-02-01', '2020-03-01', 'pre-pandemic',     '#4C72B0'),
+    ('2020-03-01', '2022-01-01', 'acute pandemic 1', '#DD8452'),
+    ('2022-01-01', '2023-01-01', 'acute pandemic 2', '#55A868'),
+    ('2023-01-01', '2024-01-01', 'transition',       '#C44E52'),
+    ('2024-01-01', '2026-03-01', 'endemic',          '#8172B3'),
 ]
 
 _VLINES = [
@@ -94,8 +94,8 @@ def baseline_non_abc_folder_name(model_name, batch_type, fairness_correction='ka
 
 
 def baseline_dynamic_folder_name(model_name, batch_type, fairness_correction='kamiran_rw', train_window=None, *, forecast_window):
-    # dynamic's own storage, separate from vanilla/static — see
-    # docs/train_window_migration_plan.md §3 for why this split exists.
+    # dynamic's own storage, separate from vanilla/static: dynamic depends on
+    # train_window and vanilla/static never do.
     fc_suffix = _fairness_correction_suffix(fairness_correction)
     tw_suffix = _train_window_suffix(train_window)
     fw_suffix = _forecast_window_suffix(forecast_window)
@@ -430,7 +430,7 @@ def _generate_comparative_chart(
         ax.tick_params(axis='x', labelsize=8)
 
     fig.suptitle(
-        f'Comparação de Baselines — Médias Móveis (janela = {moving_avg_window} batches)',
+        f'Baseline Comparison — Moving Averages (window = {moving_avg_window} batches)',
         fontsize=13, fontweight='bold',
     )
 
@@ -532,7 +532,7 @@ def _generate_absolute_rates_chart(
             bbox=dict(boxstyle='round,pad=0.4', facecolor='#f0f0f0', edgecolor='#888888', alpha=0.9),
         )
 
-    fig.suptitle('Taxas Absolutas TPR e FPR por Grupo Sensível', fontsize=14, fontweight='bold')
+    fig.suptitle('Absolute TPR and FPR Rates per Sensitive Group', fontsize=14, fontweight='bold')
 
     if period_handles:
         fig.legend(
